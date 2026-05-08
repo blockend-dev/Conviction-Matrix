@@ -1,87 +1,178 @@
-// EIP-712 order signing for SoDEX — compatible with MetaMask / WalletConnect
-// On testnet this is the full flow; on mainnet requires deposited balance
+// SoDEX EIP-712 signing — matches the actual SoDEX spec exactly
+// Ref: https://sodex.com/documentation/api/api
+//
+// Flow:
+//  1. Build the action payload: { type, params }
+//  2. payloadHash = keccak256(JSON.stringify(payload))  [compact, no spaces]
+//  3. Sign EIP-712 ExchangeAction { payloadHash, nonce }
+//  4. Prepend 0x01 to the raw signature bytes → typed signature
+//  5. Send: X-API-Key = signer address, X-API-Sign = typed sig, X-API-Nonce = nonce
 
-export interface OrderParams {
-  market: string;
-  side: "BUY" | "SELL";
-  orderType: "LIMIT" | "MARKET";
-  size: string;          // base asset amount as string (e.g. "0.05")
-  price?: string;        // limit price as string, required for LIMIT orders
-  clientOrderId?: string;
-}
+import { keccak256, toUtf8Bytes } from "ethers";
 
-// EIP-712 domain and types — matches SoDEX spec
-export const SODEX_DOMAIN = {
-  name: "SoDEX",
+// Testnet chainId = 138565, mainnet = 286623
+const IS_TESTNET = (process.env.SODEX_BASE_URL ?? "").includes("testnet");
+const CHAIN_ID   = IS_TESTNET ? 138565 : 286623;
+
+// EIP-712 domain — exactly as documented
+const SODEX_DOMAIN = {
+  name: "spot",
   version: "1",
-  chainId: 1,  // ValueChain mainnet; 11155111 for testnet
+  chainId: CHAIN_ID,
+  verifyingContract: "0x0000000000000000000000000000000000000000" as `0x${string}`,
 };
 
-export const ORDER_TYPES = {
-  Order: [
-    { name: "market",    type: "string" },
-    { name: "side",      type: "string" },
-    { name: "orderType", type: "string" },
-    { name: "size",      type: "string" },
-    { name: "price",     type: "string" },
-    { name: "nonce",     type: "uint256" },
-    { name: "expiry",    type: "uint256" },
+// EIP-712 types — exactly as documented
+const EXCHANGE_ACTION_TYPES = {
+  EIP712Domain: [
+    { name: "name",              type: "string"  },
+    { name: "version",           type: "string"  },
+    { name: "chainId",           type: "uint256" },
+    { name: "verifyingContract", type: "address" },
+  ],
+  ExchangeAction: [
+    { name: "payloadHash", type: "bytes32" },
+    { name: "nonce",       type: "uint64"  },
   ],
 };
 
-// Browser-side: calls eth_signTypedData_v4 via window.ethereum
-export async function signOrderBrowser(params: OrderParams): Promise<string> {
+// ── Spot order types (field order must match Go struct for correct payloadHash) ──
+
+export interface SpotOrderItem {
+  clOrdID: string;      // ^[0-9a-zA-Z_-]{1,36}$
+  modifier: number;     // 0 = normal, 1 = post-only
+  side: number;         // 1 = buy, 2 = sell
+  type: number;         // 1 = limit, 2 = market
+  timeInForce: number;  // 1 = GTC, 2 = IOC, 3 = GTX
+  price?: string;       // DecimalString — limit orders only
+  quantity?: string;    // DecimalString
+  funds?: string;       // DecimalString — market buy by quote amount only
+}
+
+export interface BatchNewOrderParams {
+  accountID: number;    // 0 = primary account
+  symbol: string;       // e.g. "vBTC_vUSDC"
+  orders: SpotOrderItem[];
+}
+
+export interface SignedRequest {
+  apiKey: string;       // X-API-Key: signer EVM address
+  signature: string;    // X-API-Sign: 0x01 + raw sig bytes
+  nonce: number;        // X-API-Nonce
+  body: BatchNewOrderParams;
+}
+
+// ── payloadHash computation ────────────────────────────────────────────────────
+
+function computePayloadHash(actionType: string, params: BatchNewOrderParams): string {
+  // Rules from docs:
+  // 1. Compact JSON (no whitespace)
+  // 2. Key order must match Go struct field order
+  // 3. DecimalString fields must be quoted strings
+  // 4. omitempty fields must be absent when unset
+
+  const ordersJson = params.orders.map(o => {
+    // Build in Go struct field order: clOrdID, modifier, side, type, timeInForce, price, quantity, funds
+    const entry: Record<string, unknown> = {
+      clOrdID: o.clOrdID,
+      modifier: o.modifier,
+      side: o.side,
+      type: o.type,
+      timeInForce: o.timeInForce,
+    };
+    if (o.price     !== undefined) entry.price    = o.price;
+    if (o.quantity  !== undefined) entry.quantity = o.quantity;
+    if (o.funds     !== undefined) entry.funds    = o.funds;
+    return entry;
+  });
+
+  const payload = {
+    type: actionType,
+    params: {
+      accountID: params.accountID,
+      symbol: params.symbol,
+      orders: ordersJson,
+    },
+  };
+
+  const compactJson = JSON.stringify(payload);
+  return keccak256(toUtf8Bytes(compactJson));
+}
+
+// ── Browser-side signing via MetaMask ─────────────────────────────────────────
+
+export async function signBatchOrder(params: BatchNewOrderParams): Promise<SignedRequest> {
   if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No wallet detected");
+    throw new Error("No wallet detected. Install MetaMask to execute trades.");
   }
+
   const accounts = (await window.ethereum.request({ method: "eth_accounts" })) as string[];
   if (!accounts[0]) throw new Error("Wallet not connected");
 
-  const nonce = Date.now();
-  const expiry = Math.floor(Date.now() / 1000) + 3600;  // 1 hour
+  const nonce = Date.now();   // Unix milliseconds — within (T-2days, T+1day)
 
-  const message = {
-    market:    params.market,
-    side:      params.side,
-    orderType: params.orderType,
-    size:      params.size,
-    price:     params.price ?? "0",
-    nonce,
-    expiry,
-  };
+  const payloadHash = computePayloadHash("newOrder", params);
 
   const typedData = JSON.stringify({
-    types:       { EIP712Domain: [ { name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" } ], ...ORDER_TYPES },
-    domain:      SODEX_DOMAIN,
-    primaryType: "Order",
-    message,
+    types: EXCHANGE_ACTION_TYPES,
+    domain: SODEX_DOMAIN,
+    primaryType: "ExchangeAction",
+    message: {
+      payloadHash,
+      nonce,
+    },
   });
 
-  const signature = (await window.ethereum.request({
+  const rawSig = (await window.ethereum.request({
     method: "eth_signTypedData_v4",
     params: [accounts[0], typedData],
   })) as string;
 
-  return signature;
+  // Prepend 0x01 to the raw signature bytes (typed signature format)
+  const typedSig = "0x01" + rawSig.slice(2);
+
+  return {
+    apiKey:    accounts[0],
+    signature: typedSig,
+    nonce,
+    body:      params,
+  };
 }
 
-// Submit signed order to SoDEX
-export async function submitOrder(params: OrderParams, signature: string, sender: string): Promise<{ orderId: string }> {
-  const nonce = Date.now();
-  const expiry = Math.floor(Date.now() / 1000) + 3600;
+// ── Build a spot market buy order ─────────────────────────────────────────────
 
-  const body = { ...params, signature, sender, nonce, expiry };
-
-  const res = await fetch("/api/execute", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Order submission failed: ${res.status}`);
-  return res.json();
+export function buildMarketBuy(symbol: string, quantity: string, clOrdID?: string): BatchNewOrderParams {
+  return {
+    accountID: 0,
+    symbol,
+    orders: [{
+      clOrdID:     clOrdID ?? `cm-${Date.now()}`,
+      modifier:    0,
+      side:        1,       // buy
+      type:        2,       // market
+      timeInForce: 2,       // IOC (required for market)
+      quantity,
+    }],
+  };
 }
 
-// Add ethereum to Window type
+export function buildLimitBuy(symbol: string, price: string, quantity: string, clOrdID?: string): BatchNewOrderParams {
+  return {
+    accountID: 0,
+    symbol,
+    orders: [{
+      clOrdID:     clOrdID ?? `cm-${Date.now()}`,
+      modifier:    0,
+      side:        1,       // buy
+      type:        1,       // limit
+      timeInForce: 1,       // GTC
+      price,
+      quantity,
+    }],
+  };
+}
+
+// Declare global for window.ethereum
 declare global {
   interface Window {
     ethereum?: {

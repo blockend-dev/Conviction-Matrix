@@ -1,33 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SODEX_BASE = process.env.SODEX_BASE_URL ?? "https://api.sodex.com";
-const SODEX_KEY  = process.env.SODEX_API_KEY ?? "";
+const SODEX_BASE = (process.env.SODEX_BASE_URL ?? "https://testnet-gw.sodex.dev/api/v1/spot").replace(/\/$/, "");
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { market, side, orderType, size, price, signature, sender, nonce, expiry } = body;
+  const { apiKey, signature, nonce, params } = body;
 
-  if (!market || !side || !size || !signature || !sender) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  if (!apiKey || !signature || !nonce || !params) {
+    return NextResponse.json({ error: "Missing required fields: apiKey, signature, nonce, params" }, { status: 400 });
   }
 
   try {
-    const res = await fetch(`${SODEX_BASE}/v1/orders`, {
+    const res = await fetch(`${SODEX_BASE}/trade/orders/batch`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": SODEX_KEY,
+        "Accept":        "application/json",
+        "X-API-Key":     apiKey,
+        "X-API-Sign":    signature,
+        "X-API-Nonce":   String(nonce),
       },
-      body: JSON.stringify({ market, side, orderType, size, price, signature, sender, nonce, expiry }),
+      body: JSON.stringify(params),
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return NextResponse.json({ error: "SoDEX rejected order", detail: errText }, { status: res.status });
+    const data = await res.json();
+
+    if (!res.ok || data.code !== 0) {
+      return NextResponse.json(
+        { error: "SoDEX rejected order", detail: data.message ?? JSON.stringify(data) },
+        { status: res.ok ? 422 : res.status }
+      );
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ success: true, orders: data.data });
   } catch (err) {
     return NextResponse.json({ error: "SoDEX unreachable", detail: String(err) }, { status: 502 });
   }
