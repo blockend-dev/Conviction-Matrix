@@ -307,7 +307,6 @@ src/
     └── claude.ts                   # Claude narrative generation
 ```
 
----
 
 ## Wave 2 Roadmap
 
