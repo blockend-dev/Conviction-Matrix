@@ -253,15 +253,42 @@ A historically bullish macro environment pushes L3 above 50. A hawkish history p
 
 ### SoDEX API Integration
 
+**Base URL (testnet):** `https://testnet-gw.sodex.dev/api/v1/spot` · chainId `138565` · No deposit required on testnet.
+
 | Type | Endpoint | Usage in Product |
 |------|----------|-----------------|
-| Read | `GET /v1/markets` | Populate market selector in execution modal |
-| Read | `GET /v1/markets/{market}/ticker` | Live prices in scrolling ticker strip across the top of the dashboard |
-| Read | `GET /v1/markets/{market}/orderbook` | Slippage estimation before execution (Wave 2) |
-| Read | `GET /v1/markets/{market}/klines` | Price chart in drill-down panel (Wave 2) |
-| Write | `POST /v1/orders` | EIP-712 signed limit/market order submission, proxied server-side |
+| Read | `GET /markets/symbols` | Fetch trading pairs, tick size, step size, precision rules |
+| Read | `GET /markets/tickers` | 24hr price stats — powers the live scrolling ticker strip |
+| Read | `GET /markets/{symbol}/orderbook` | Order book depth for slippage estimation (Wave 2) |
+| Read | `GET /markets/{symbol}/klines` | OHLCV candlestick data for price chart (Wave 2) |
+| Read | `GET /markets/{symbol}/trades` | Recent public trades feed |
+| Write | `POST /trade/orders/batch` | Submit signed spot orders atomically |
 
-**Security note:** The SoDEX API key never reaches the browser. The execution modal calls our own `/api/execute` Next.js route, which holds the key server-side and forwards the signed order to SoDEX. The browser only signs the EIP-712 typed data — it never sees the API credential.
+**How authentication works (write endpoints):**
+
+SoDEX uses EVM addresses as API keys — no separate key generation needed. The signer's wallet address is passed as `X-API-Key`. The request is authenticated via three headers:
+
+| Header | Value |
+|--------|-------|
+| `X-API-Key` | Signer's EVM address (e.g. `0xAbCd...`) |
+| `X-API-Sign` | Typed EIP-712 signature — `0x01` prepended to raw sig bytes |
+| `X-API-Nonce` | Unix milliseconds timestamp (valid within T ± 2 days) |
+
+**EIP-712 signing mechanism:**
+
+SoDEX uses a custom `ExchangeAction` type — not a generic order struct:
+
+```
+domain:      { name: "spot", version: "1", chainId: 138565, verifyingContract: "0x000...000" }
+primaryType: "ExchangeAction"
+message:     { payloadHash: bytes32, nonce: uint64 }
+```
+
+Where `payloadHash = keccak256(JSON.stringify({ type: "newOrder", params: { ... } }))`.
+
+Key rules for correct `payloadHash`: compact JSON (no whitespace), Go struct field order, decimal fields as quoted strings, omitempty fields absent when unset.
+
+**Security note:** The server-side `/api/execute` route proxies the signed order to SoDEX, keeping any server credentials out of the browser bundle. The browser only performs the EIP-712 signature — it never touches the `X-API-Sign` construction logic.
 
 ---
 
@@ -541,3 +568,8 @@ Building on the Wave 1 foundation, Wave 2 will focus on live execution and produ
 
 ---
 
+## Contact
+
+**Email:** oladayoahmod1122@gmail.com
+**GitHub:** [repo link — add before submission]
+**Live Demo:** [Vercel URL — Wave 2 deployment]
