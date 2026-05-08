@@ -64,11 +64,17 @@ Fund managers and researchers use the drill-down view to understand WHY a sector
 
 ### SoDEX API
 
-| Endpoint | Usage |
-|----------|-------|
-| `GET /v1/markets` | Fetch available trading pairs |
-| `GET /v1/markets/{market}/ticker` | Live prices in market ticker strip |
-| `POST /v1/orders` (EIP-712 signed) | Execute trades from conviction signals |
+| Type | Endpoint | Usage |
+|------|----------|-------|
+| Read | `GET /markets/symbols` | Trading pair rules (tick/step size, precision) |
+| Read | `GET /markets/tickers` | 24hr price stats — live ticker strip |
+| Read | `GET /markets/{symbol}/orderbook` | Order book depth |
+| Read | `GET /markets/{symbol}/klines` | OHLCV candlestick data |
+| Write | `POST /trade/orders/batch` | EIP-712 signed batch order submission |
+
+**Auth:** `X-API-Key` (signer EVM address) · `X-API-Sign` (0x01-prefixed EIP-712 sig) · `X-API-Nonce` (Unix ms timestamp)
+
+**Testnet base URL:** `https://testnet-gw.sodex.dev/api/v1/spot` · chainId `138565`
 
 ### Claude API (Anthropic)
 
@@ -303,18 +309,6 @@ src/
 
 ---
 
-## Judging Criteria — Wave 1
-
-| Criterion | Weight | Evidence |
-|-----------|--------|---------|
-| **User Value & Practical Impact** | 30% | Unique insight: retail users can now see institutional conviction before it becomes news. No other submission tracks fundraising + BTC treasuries + crypto stocks together |
-| **Functionality & Working Demo** | 25% | Full working prototype: scoring engine, dashboard, drill-down, SoDEX execution modal. Mock data fallback ensures demo never breaks |
-| **Logic, Workflow & Product Design** | 20% | 3-layer weighted scoring algorithm with clear mathematical definition. Workflow diagram shows full data-to-execution pipeline |
-| **Data / API Integration** | 15% | 9 SoSoValue modules + SoDEX read + write. Most API-complete submission |
-| **UX & Clarity** | 10% | Bloomberg-dark terminal theme. Zero-friction: score → click → drill-down → execute in 3 clicks |
-
----
-
 ## Wave 2 Roadmap
 
 - [ ] Backtesting engine: historical conviction score vs. actual price returns per sector
@@ -331,8 +325,3 @@ src/
 - [ ] Public signal sharing: shareable conviction report URL
 
 ---
-
-## Team
-
-Built for the SoSoValue Buildathon — Wave 1.  
-Contact: oladayoahmod1122@gmail.com
