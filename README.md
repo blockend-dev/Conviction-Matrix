@@ -4,7 +4,7 @@
 
 Conviction Matrix is an institutional signal convergence engine built on SoSoValue + SoDEX. It tracks where smart money is moving *before* it becomes a news story — and executes when all three institutional layers align.
 
-**Live Demo:** [https://conviction-matrix.vercel.app/]([http://localhost:3000](https://conviction-matrix.vercel.app/) 
+**Live Demo:** [https://conviction-matrix.vercel.app](https://conviction-matrix.vercel.app/) 
 
 ---
 
