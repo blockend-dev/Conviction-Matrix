@@ -25,24 +25,19 @@ body {
 ::-webkit-scrollbar-thumb { background: #1a2d3d; border-radius: 2px; }
 
 .conviction-cell {
-  transition: all 0.3s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .conviction-cell:hover {
-  transform: scale(1.02);
   z-index: 10;
 }
-
-.glow-green  { box-shadow: 0 0 12px #00ff8840; }
-.glow-yellow { box-shadow: 0 0 12px #ffd70040; }
-.glow-red    { box-shadow: 0 0 12px #ff224440; }
 
 @keyframes scanline {
   0%   { transform: translateY(-100%); }
   100% { transform: translateY(100vh); }
 }
 .scanline {
-  position: fixed; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(transparent, #00ff8815, transparent);
-  animation: scanline 8s linear infinite;
+  position: fixed; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(transparent, #00ff8808, transparent);
+  animation: scanline 16s linear infinite;
   pointer-events: none; z-index: 9999;
 }
