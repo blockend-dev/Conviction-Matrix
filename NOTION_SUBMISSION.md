@@ -568,8 +568,3 @@ Building on the Wave 1 foundation, Wave 2 will focus on live execution and produ
 
 ---
 
-## Contact
-
-**Email:** oladayoahmod1122@gmail.com
-**GitHub:** [repo link — add before submission]
-**Live Demo:** [Vercel URL — Wave 2 deployment]
