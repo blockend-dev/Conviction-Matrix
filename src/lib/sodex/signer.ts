@@ -8,7 +8,8 @@
 //  4. Prepend 0x01 to the raw signature bytes → typed signature
 //  5. Send: X-API-Key = signer address, X-API-Sign = typed sig, X-API-Nonce = nonce
 
-import { keccak256, toUtf8Bytes } from "ethers";
+import { keccak256, toBytes } from "viem";
+import type { WalletClient } from "viem";
 
 // Testnet chainId = 138565, mainnet = 286623
 const IS_TESTNET = (process.env.SODEX_BASE_URL ?? "").includes("testnet");
@@ -96,7 +97,7 @@ function computePayloadHash(actionType: string, params: BatchNewOrderParams): st
   };
 
   const compactJson = JSON.stringify(payload);
-  return keccak256(toUtf8Bytes(compactJson));
+  return keccak256(toBytes(compactJson));
 }
 
 // ── Browser-side signing via MetaMask ─────────────────────────────────────────
@@ -133,6 +134,44 @@ export async function signBatchOrder(params: BatchNewOrderParams): Promise<Signe
 
   return {
     apiKey:    accounts[0],
+    signature: typedSig,
+    nonce,
+    body:      params,
+  };
+}
+
+// ── Wagmi / viem wallet client signing (RainbowKit) ──────────────────────────
+
+export async function signBatchOrderWithWagmi(
+  params: BatchNewOrderParams,
+  walletClient: WalletClient
+): Promise<SignedRequest> {
+  const account = walletClient.account;
+  if (!account) throw new Error("No account connected");
+
+  const nonce = Date.now();
+  const payloadHash = computePayloadHash("newOrder", params);
+
+  const rawSig = await walletClient.signTypedData({
+    account,
+    domain: SODEX_DOMAIN,
+    types: {
+      ExchangeAction: [
+        { name: "payloadHash", type: "bytes32" },
+        { name: "nonce",       type: "uint64"  },
+      ],
+    },
+    primaryType: "ExchangeAction",
+    message: {
+      payloadHash: payloadHash as `0x${string}`,
+      nonce: BigInt(nonce),
+    },
+  });
+
+  const typedSig = "0x01" + rawSig.slice(2);
+
+  return {
+    apiKey:    account.address,
     signature: typedSig,
     nonce,
     body:      params,

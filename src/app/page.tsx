@@ -1,11 +1,14 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { RefreshCw, Zap, TrendingUp, Activity } from "lucide-react";
+import Link from "next/link";
+import { RefreshCw, Zap, TrendingUp, Activity, BarChart2 } from "lucide-react";
 import ConvictionCell from "@/components/ConvictionCell";
 import SignalDetail from "@/components/SignalDetail";
 import ExecutionModal from "@/components/ExecutionModal";
 import NewsFeed from "@/components/NewsFeed";
 import MarketTicker from "@/components/MarketTicker";
+import WalletButton from "@/components/WalletButton";
+import ConvictionAlerts from "@/components/ConvictionAlerts";
 import type { ConvictionSignal } from "@/lib/types";
 
 export default function Home() {
@@ -58,12 +61,21 @@ export default function Home() {
               Stop trading news. Start trading conviction. · Powered by SoSoValue + SoDEX
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 flex-wrap">
             {lastUpdated && (
               <span className="text-xs text-terminal-text hidden sm:block">
                 Updated {lastUpdated}
               </span>
             )}
+            <ConvictionAlerts signals={signals} />
+            <Link
+              href="/backtest"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-terminal-border rounded text-xs text-terminal-text hover:text-terminal-bright hover:border-terminal-bright transition-colors"
+            >
+              <BarChart2 size={12} />
+              Backtest
+            </Link>
+            <WalletButton />
             <button
               onClick={fetchSignals}
               disabled={loading}
