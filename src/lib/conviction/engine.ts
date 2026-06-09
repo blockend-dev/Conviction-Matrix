@@ -1,9 +1,8 @@
 import type { Sector, FundraisingSignal, InstitutionalSignal, MacroConfirmation, ConvictionSignal } from "../types";
 import { SECTOR_TOKEN_MAP } from "./sectorMap";
 import {
-  getFundraisingProjects, getBTCTreasuries, getBTCPurchaseHistory,
-  getCryptoStocks, getStockSnapshot, getETFSummaryHistory,
-  getMacroEventHistory, getSectorSpotlight,
+  getBTCTreasuries, getBTCPurchaseHistory,
+  getStockSnapshot, getETFSummaryHistory, getMacroEventHistory,
 } from "../sosovalue/client";
 import {
   mockFundraising, mockBTCTreasuries, mockBTCPurchases, mockStockSnapshots,
@@ -54,29 +53,25 @@ export async function computeFundraisingSignal(sector: Sector): Promise<Fundrais
 // ── Layer 2: Institutional accumulation ─────────────────────────────────────
 
 export async function computeInstitutionalSignal(sector: Sector): Promise<InstitutionalSignal> {
-  const treasuries = USE_MOCK
-    ? mockBTCTreasuries
-    : await safe(() => getBTCTreasuries(), mockBTCTreasuries);
+  const stockTickers = ["MSTR", "COIN", "MARA", "RIOT"];
 
-  // BTC treasury recent purchases (use MSTR as proxy for institutional sentiment)
-  const purchases = USE_MOCK
-    ? mockBTCPurchases
-    : await safe(() => getBTCPurchaseHistory("MSTR", 10), mockBTCPurchases);
+  // Run all independent API calls in parallel — avoids sequential 8s timeouts stacking up
+  const [treasuries, purchases, ...stockSnaps] = await Promise.all([
+    USE_MOCK ? Promise.resolve(mockBTCTreasuries) : safe(() => getBTCTreasuries(), mockBTCTreasuries),
+    USE_MOCK ? Promise.resolve(mockBTCPurchases)  : safe(() => getBTCPurchaseHistory("MSTR", 10), mockBTCPurchases),
+    ...stockTickers.map(ticker =>
+      USE_MOCK
+        ? Promise.resolve(mockStockSnapshots[ticker])
+        : safe(() => getStockSnapshot(ticker), mockStockSnapshots[ticker])
+    ),
+  ]);
 
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
   const now = Date.now();
   const recentPurchases = purchases.filter(p => now - new Date(p.date).getTime() < thirtyDays);
   const recentBTC = recentPurchases.reduce((s, p) => s + p.amount, 0);
 
-  // Crypto stock momentum for BTC-adjacent sectors
-  const stockTickers = ["MSTR", "COIN", "MARA", "RIOT"];
-  const stockChanges: number[] = [];
-  for (const ticker of stockTickers) {
-    const snap = USE_MOCK
-      ? mockStockSnapshots[ticker]
-      : await safe(() => getStockSnapshot(ticker), mockStockSnapshots[ticker]);
-    if (snap?.change) stockChanges.push(snap.change);
-  }
+  const stockChanges = stockSnaps.map(s => s?.change ?? 0).filter(c => c !== 0);
   const avgStockMomentum = stockChanges.length
     ? stockChanges.reduce((a, b) => a + b, 0) / stockChanges.length
     : 0;
@@ -103,19 +98,16 @@ export async function computeInstitutionalSignal(sector: Sector): Promise<Instit
 // ── Layer 3: ETF + Macro confirmation ────────────────────────────────────────
 
 export async function computeMacroConfirmation(): Promise<MacroConfirmation> {
-  const etfHistory = USE_MOCK
-    ? mockETFHistory
-    : await safe(() => getETFSummaryHistory(14), mockETFHistory);
+  // Run ETF history and macro history in parallel
+  const [etfHistory, fomcHistory] = await Promise.all([
+    USE_MOCK ? Promise.resolve(mockETFHistory)   : safe(() => getETFSummaryHistory(14), mockETFHistory),
+    USE_MOCK ? Promise.resolve(mockMacroHistory) : safe(() => getMacroEventHistory("FOMC Rate Decision", 6), mockMacroHistory),
+  ]);
 
   // 7-day rolling net ETF flow
   const recent7 = etfHistory.slice(0, 7);
   const etfNetFlow = recent7.reduce((s, e) => s + e.totalNetFlow, 0);
   const etfFlowScore = Math.min(100, Math.max(0, 50 + (etfNetFlow / 100_000_000) * 10));
-
-  // Macro event historical impact on crypto
-  const fomcHistory = USE_MOCK
-    ? mockMacroHistory
-    : await safe(() => getMacroEventHistory("FOMC Rate Decision", 6), mockMacroHistory);
 
   const avgImpact = fomcHistory.length
     ? fomcHistory.reduce((s, e) => s + e.btcChange24h, 0) / fomcHistory.length
@@ -155,10 +147,11 @@ export async function computeConviction(sector: Sector): Promise<ConvictionSigna
   const layer2Score = institutional.institutionalScore;
   const layer3Score = macro.macroScore;
 
+  const s1 = isNaN(layer1Score) ? 0 : layer1Score;
+  const s2 = isNaN(layer2Score) ? 0 : layer2Score;
+  const s3 = isNaN(layer3Score) ? 0 : layer3Score;
   // Weighted: L1 30% + L2 35% + L3 35%
-  const overallScore = Math.round(
-    layer1Score * 0.30 + layer2Score * 0.35 + layer3Score * 0.35
-  );
+  const overallScore = Math.round(s1 * 0.30 + s2 * 0.35 + s3 * 0.35);
 
   return {
     sector,

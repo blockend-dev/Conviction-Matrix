@@ -13,6 +13,7 @@ export async function GET() {
       ? await generateAllNarratives(signals)
       : signals;
 
+    console.log("[conviction] scores:", withNarratives.map(s => `${s.sector}:${s.overallScore}`).join(" "));
     return NextResponse.json({
       signals: withNarratives,
       timestamp: new Date().toISOString(),

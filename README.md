@@ -128,7 +128,7 @@ L3 = (etf_score + macro_score) / 2
 ## Quick Start
 
 ```bash
-git clone <repo>
+git clone https://github.com/blockend-dev/Conviction-Matrix
 cd conviction-matrix
 npm install
 

@@ -6,16 +6,25 @@ async function get<T>(path: string, params?: Record<string, string | number>): P
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
   }
-  const res = await fetch(url.toString(), {
-    headers: {
-      "x-soso-api-key": API_KEY,
-      "Content-Type": "application/json",
-    },
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) throw new Error(`SoSoValue API error ${res.status}: ${path}`);
-  const json = await res.json();
-  return json.data ?? json;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        "x-soso-api-key": API_KEY,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+      next: { revalidate: 60 },
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`SoSoValue API error ${res.status}: ${path}`);
+    const json = await res.json();
+    return json.data ?? json;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
 }
 
 // Currencies
@@ -36,13 +45,15 @@ interface ETFSummaryRaw {
   totalNetFlow?: number;
   totalNetAsset?: number;
 }
+function n(v: unknown): number { return Number(v) || 0; }
+
 function mapETFSummary(r: ETFSummaryRaw): ETFSummary {
   return {
     date: r.date ?? "",
-    totalNetFlow: r.total_net_inflow ?? r.totalNetFlow ?? 0,
+    totalNetFlow: n(r.total_net_inflow ?? r.totalNetFlow),
     btcFlow: 0,
     ethFlow: 0,
-    totalNetAsset: r.total_net_assets ?? r.totalNetAsset ?? 0,
+    totalNetAsset: n(r.total_net_assets ?? r.totalNetAsset),
   };
 }
 export const getETFSummaryHistory = async (days = 30): Promise<ETFSummary[]> => {
@@ -74,9 +85,9 @@ interface StockSnapshotRaw {
 function mapStockSnapshot(r: StockSnapshotRaw, ticker: string): StockSnapshot {
   return {
     ticker: r.ticker ?? ticker,
-    price: r.mkt_price ?? r.price ?? 0,
-    change: r.change ?? 0, // not in API; defaults to 0
-    marketCap: r.total_marketcap ?? r.circulating_marketcap ?? r.marketCap ?? 0,
+    price: n(r.mkt_price ?? r.price),
+    change: n(r.change),
+    marketCap: n(r.total_marketcap ?? r.circulating_marketcap ?? r.marketCap),
   };
 }
 export const getCryptoStocks = () => get<StockItem[]>("/crypto-stocks");
@@ -108,18 +119,18 @@ function mapBTCTreasury(r: BTCTreasuryRaw): BTCTreasury {
     ticker: r.ticker ?? "",
     name: r.name ?? "",
     country: r.list_location ?? r.country ?? "US",
-    totalBTC: 0,   // not in list endpoint
+    totalBTC: 0,
     totalValue: 0,
   };
 }
 function mapBTCPurchase(r: BTCPurchaseRaw): BTCPurchase {
-  const amount = r.btc_acq ?? r.amount ?? 0;
-  const price  = r.avg_btc_cost ?? r.price ?? 0;
+  const amount = n(r.btc_acq ?? r.amount);
+  const price  = n(r.avg_btc_cost ?? r.price);
   return {
     date: r.date ?? "",
     amount,
     price,
-    totalValue: r.acq_cost ?? r.totalValue ?? amount * price,
+    totalValue: n(r.acq_cost ?? r.totalValue) || amount * price,
   };
 }
 export const getBTCTreasuries = async (): Promise<BTCTreasury[]> => {
@@ -190,10 +201,10 @@ interface MacroEventHistoryRaw {
 function mapMacroHistory(r: MacroEventHistoryRaw): MacroEventHistory {
   return {
     date: r.date ?? "",
-    actual: r.actual ?? 0,
-    forecast: r.forecast ?? 0,
-    btcChange24h: r.btcChange24h ?? 0,
-    cryptoMarketChange: r.cryptoMarketChange ?? 0,
+    actual: n(r.actual),
+    forecast: n(r.forecast),
+    btcChange24h: n(r.btcChange24h),
+    cryptoMarketChange: n(r.cryptoMarketChange),
   };
 }
 export const getMacroEvents = (date?: string) =>
