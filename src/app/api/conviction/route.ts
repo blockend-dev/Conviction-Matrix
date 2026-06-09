@@ -4,6 +4,8 @@ import { generateAllNarratives } from "@/lib/claude";
 
 export const dynamic = "force-dynamic";
 
+const USE_MOCK = !process.env.SOSOVALUE_API_KEY || process.env.SOSOVALUE_API_KEY === "your_sosovalue_api_key_here";
+
 export async function GET() {
   try {
     const signals = await computeAllSectors();
@@ -11,7 +13,12 @@ export async function GET() {
       ? await generateAllNarratives(signals)
       : signals;
 
-    return NextResponse.json({ signals: withNarratives, timestamp: new Date().toISOString() });
+    return NextResponse.json({
+      signals: withNarratives,
+      timestamp: new Date().toISOString(),
+      source: USE_MOCK ? "mock" : "live",
+      aiNarratives: !!process.env.ANTHROPIC_API_KEY,
+    });
   } catch (err) {
     console.error("Conviction engine error:", err);
     return NextResponse.json({ error: "Engine failed", detail: String(err) }, { status: 500 });

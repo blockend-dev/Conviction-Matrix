@@ -3,22 +3,42 @@ import { useEffect, useState } from "react";
 import type { SoSoNews } from "@/lib/types";
 
 export default function NewsFeed() {
-  const [news, setNews] = useState<SoSoNews[]>([]);
+  const [news, setNews]       = useState<SoSoNews[]>([]);
+  const [source, setSource]   = useState<"live" | "mock" | null>(null);
 
   useEffect(() => {
-    fetch("/api/news")
-      .then(r => r.json())
-      .then(d => setNews(d.news ?? []))
-      .catch(() => {});
+    const load = () =>
+      fetch("/api/news")
+        .then(r => r.json())
+        .then(d => {
+          setNews(d.news ?? []);
+          setSource(d.source ?? null);
+        })
+        .catch(() => {});
+
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   if (!news.length) return null;
 
   return (
     <div className="border border-terminal-border rounded-xl bg-terminal-surface overflow-hidden">
-      <div className="px-4 py-3 border-b border-terminal-border flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-signal-strong animate-pulse" />
-        <span className="text-xs font-bold text-terminal-bright tracking-widest">LIVE INTELLIGENCE FEED</span>
+      <div className="px-4 py-3 border-b border-terminal-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-signal-strong animate-pulse" />
+          <span className="text-xs font-bold text-terminal-bright tracking-widest">INTELLIGENCE FEED</span>
+        </div>
+        {source && (
+          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+            source === "live"
+              ? "text-signal-strong bg-signal-strong/10"
+              : "text-signal-neutral bg-signal-neutral/10"
+          }`}>
+            {source === "live" ? "LIVE" : "MOCK"}
+          </span>
+        )}
       </div>
       <div className="divide-y divide-terminal-border max-h-72 overflow-y-auto">
         {news.map(item => (

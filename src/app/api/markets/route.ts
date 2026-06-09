@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTickers, mockTickers, getSymbols, mockSymbols } from "@/lib/sodex/client";
 import type { SpotTicker } from "@/lib/sodex/client";
 
+// The live SoDEX API uses different field names than our type — normalise either way.
 function normalizeTicker(raw: Record<string, unknown>): SpotTicker {
   return {
     symbol:             String(raw.symbol             ?? ""),

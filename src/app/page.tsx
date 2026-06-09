@@ -18,6 +18,8 @@ export default function Home() {
   const [selected, setSelected]       = useState<ConvictionSignal | null>(null);
   const [executing, setExecuting]     = useState<ConvictionSignal | null>(null);
   const [error, setError]             = useState("");
+  const [dataSource, setDataSource]   = useState<"live" | "mock" | null>(null);
+  const [aiActive, setAiActive]       = useState(false);
 
   const fetchSignals = useCallback(async () => {
     setLoading(true);
@@ -27,6 +29,8 @@ export default function Home() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       setSignals(data.signals ?? []);
+      setDataSource(data.source ?? null);
+      setAiActive(data.aiNarratives ?? false);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (e: any) {
       setError(e.message);
@@ -57,9 +61,25 @@ export default function Home() {
             <h1 className="text-xl font-black text-terminal-bright tracking-tight">
               ◈ CONVICTION MATRIX
             </h1>
-            <p className="text-xs text-terminal-text mt-0.5">
-              Stop trading news. Start trading conviction. · Powered by SoSoValue + SoDEX
-            </p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <p className="text-xs text-terminal-text">
+                Stop trading news. Start trading conviction.
+              </p>
+              {dataSource && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                  dataSource === "live"
+                    ? "text-signal-strong bg-signal-strong/10"
+                    : "text-signal-neutral bg-signal-neutral/10"
+                }`}>
+                  {dataSource === "live" ? "● LIVE DATA" : "● MOCK DATA"}
+                </span>
+              )}
+              {aiActive && (
+                <span className="text-xs font-bold px-2 py-0.5 rounded text-signal-mild bg-signal-mild/10">
+                  ◈ AI ON
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {lastUpdated && (

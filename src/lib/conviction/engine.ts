@@ -19,13 +19,13 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 // ── Layer 1: Fundraising ─────────────────────────────────────────────────────
 
 export async function computeFundraisingSignal(sector: Sector): Promise<FundraisingSignal> {
-  const projects = USE_MOCK
-    ? mockFundraising
-    : await safe(() => getFundraisingProjects(100), mockFundraising);
+  // SoSoValue /fundraising/projects only returns project_id + project_name; no sector/amount/date
+  // in the list. Sector-level scoring requires mock data until a richer endpoint is available.
+  const projects = mockFundraising;
 
   const now = Date.now();
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-  const relevant = projects.filter(p => p.sector.toUpperCase() === sector.toUpperCase());
+  const relevant = projects.filter(p => (p.sector ?? "").toUpperCase() === sector.toUpperCase());
   const recent = relevant.filter(p => now - new Date(p.date).getTime() < thirtyDays);
 
   const totalRaised = recent.reduce((s, p) => s + (p.amount ?? 0), 0);
