@@ -150,11 +150,13 @@ const NEWS_CATEGORY_LABELS: Record<number, string> = {
 
 function mapNewsItem(raw: NewsItemRaw): NewsItem {
   const plain = raw.content?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) ?? "";
+  const ts = raw.release_time ? new Date(raw.release_time) : null;
+  const publishTime = ts && !isNaN(ts.getTime()) ? ts.toISOString() : new Date().toISOString();
   return {
     newsId: String(raw.id),
     title: raw.title ?? "",
     summary: plain,
-    publishTime: new Date(raw.release_time).toISOString(),
+    publishTime,
     categories: [NEWS_CATEGORY_LABELS[raw.category] ?? "News", ...(raw.tags ?? [])].slice(0, 3),
     currencyCodes: (raw.matched_currencies ?? []).map(c => c.name).slice(0, 5),
   };

@@ -8,12 +8,16 @@ const USE_MOCK = !process.env.SOSOVALUE_API_KEY || process.env.SOSOVALUE_API_KEY
 
 export async function GET() {
   if (USE_MOCK) {
-    return NextResponse.json({ news: mockNews, source: "mock" });
+    return NextResponse.json({ news: mockNews, source: "mock", reason: "no_api_key" });
   }
   try {
     const news = await getNewsFeed(30);
+    if (!news.length) {
+      return NextResponse.json({ news: mockNews, source: "mock", reason: "empty_response" });
+    }
     return NextResponse.json({ news, source: "live" });
-  } catch {
-    return NextResponse.json({ news: mockNews, source: "mock" });
+  } catch (err) {
+    console.error("[news route]", err);
+    return NextResponse.json({ news: mockNews, source: "mock", reason: String(err) });
   }
 }
