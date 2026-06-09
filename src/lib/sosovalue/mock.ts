@@ -2,26 +2,28 @@
 import type { ETFSummary, FundraisingProject, BTCTreasury, BTCPurchase, StockSnapshot, MacroEvent, MacroEventHistory, NewsItem, SectorData, IndexSnapshot } from "./client";
 
 export const mockETFHistory: ETFSummary[] = [
-  { date: "2026-05-07", totalNetFlow: 318_000_000, btcFlow: 245_000_000, ethFlow: 73_000_000, totalNetAsset: 112_400_000_000 },
-  { date: "2026-05-06", totalNetFlow: -42_000_000, btcFlow: -61_000_000, ethFlow: 19_000_000, totalNetAsset: 112_100_000_000 },
-  { date: "2026-05-05", totalNetFlow: 521_000_000, btcFlow: 410_000_000, ethFlow: 111_000_000, totalNetAsset: 112_140_000_000 },
-  { date: "2026-05-04", totalNetFlow: 189_000_000, btcFlow: 140_000_000, ethFlow: 49_000_000, totalNetAsset: 111_620_000_000 },
-  { date: "2026-05-03", totalNetFlow: -88_000_000, btcFlow: -95_000_000, ethFlow: 7_000_000, totalNetAsset: 111_430_000_000 },
-  { date: "2026-05-02", totalNetFlow: 672_000_000, btcFlow: 510_000_000, ethFlow: 162_000_000, totalNetAsset: 111_520_000_000 },
-  { date: "2026-05-01", totalNetFlow: 230_000_000, btcFlow: 185_000_000, ethFlow: 45_000_000, totalNetAsset: 110_850_000_000 },
+  { date: "2026-06-08", totalNetFlow: 318_000_000,  btcFlow: 245_000_000, ethFlow: 73_000_000,  totalNetAsset: 118_400_000_000 },
+  { date: "2026-06-07", totalNetFlow: -42_000_000,  btcFlow: -61_000_000, ethFlow: 19_000_000,  totalNetAsset: 118_100_000_000 },
+  { date: "2026-06-06", totalNetFlow: 521_000_000,  btcFlow: 410_000_000, ethFlow: 111_000_000, totalNetAsset: 118_140_000_000 },
+  { date: "2026-06-05", totalNetFlow: 189_000_000,  btcFlow: 140_000_000, ethFlow: 49_000_000,  totalNetAsset: 117_620_000_000 },
+  { date: "2026-06-04", totalNetFlow: -88_000_000,  btcFlow: -95_000_000, ethFlow: 7_000_000,   totalNetAsset: 117_430_000_000 },
+  { date: "2026-06-03", totalNetFlow: 672_000_000,  btcFlow: 510_000_000, ethFlow: 162_000_000, totalNetAsset: 117_520_000_000 },
+  { date: "2026-06-02", totalNetFlow: 230_000_000,  btcFlow: 185_000_000, ethFlow: 45_000_000,  totalNetAsset: 116_850_000_000 },
 ];
 
 export const mockFundraising: FundraisingProject[] = [
-  { id: "1", name: "Lumia Network", sector: "L2", stage: "Series A", amount: 15_000_000, date: "2026-05-06", investors: ["a16z", "Paradigm"] },
-  { id: "2", name: "Kaito AI", sector: "AI", stage: "Seed", amount: 8_500_000, date: "2026-05-05", investors: ["Multicoin", "Binance Labs"] },
-  { id: "3", name: "Hivemapper", sector: "DePIN", stage: "Series B", amount: 50_000_000, date: "2026-05-04", investors: ["Framework Ventures"] },
-  { id: "4", name: "Spectral Finance", sector: "DeFi", stage: "Series A", amount: 22_000_000, date: "2026-05-03", investors: ["Spartan Group"] },
-  { id: "5", name: "Roam", sector: "DePIN", stage: "Seed", amount: 3_500_000, date: "2026-05-02", investors: ["OKX Ventures"] },
-  { id: "6", name: "Pell Network", sector: "L2", stage: "Seed", amount: 5_000_000, date: "2026-05-01", investors: ["HashKey"] },
-  { id: "7", name: "Aethir", sector: "AI", stage: "Series B", amount: 35_000_000, date: "2026-04-30", investors: ["Merit Circle", "Sanctor Capital"] },
-  { id: "8", name: "Plume Network", sector: "RWA", stage: "Series A", amount: 20_000_000, date: "2026-04-28", investors: ["Haun Ventures", "Galaxy Digital"] },
-  { id: "9", name: "Nillion", sector: "AI", stage: "Series A", amount: 25_000_000, date: "2026-04-27", investors: ["a16z Crypto", "Hack VC"] },
-  { id: "10", name: "Ondo Finance", sector: "RWA", stage: "Series B", amount: 46_000_000, date: "2026-04-25", investors: ["BlackRock Strategic", "Coinbase Ventures"] },
+  { id: "1",  name: "Lumia Network",    sector: "L2",     stage: "Series A", amount: 15_000_000, date: "2026-06-07", investors: ["a16z", "Paradigm"] },
+  { id: "2",  name: "Kaito AI",         sector: "AI",     stage: "Seed",     amount: 8_500_000,  date: "2026-06-05", investors: ["Multicoin", "Binance Labs"] },
+  { id: "3",  name: "Hivemapper",       sector: "DePIN",  stage: "Series B", amount: 50_000_000, date: "2026-06-03", investors: ["Framework Ventures"] },
+  { id: "4",  name: "Spectral Finance", sector: "DeFi",   stage: "Series A", amount: 22_000_000, date: "2026-06-01", investors: ["Spartan Group"] },
+  { id: "5",  name: "Roam",             sector: "DePIN",  stage: "Seed",     amount: 3_500_000,  date: "2026-05-29", investors: ["OKX Ventures"] },
+  { id: "6",  name: "Pell Network",     sector: "L2",     stage: "Seed",     amount: 5_000_000,  date: "2026-05-26", investors: ["HashKey"] },
+  { id: "7",  name: "Aethir",           sector: "AI",     stage: "Series B", amount: 35_000_000, date: "2026-05-23", investors: ["Merit Circle", "Sanctor Capital"] },
+  { id: "8",  name: "Plume Network",    sector: "RWA",    stage: "Series A", amount: 20_000_000, date: "2026-05-20", investors: ["Haun Ventures", "Galaxy Digital"] },
+  { id: "9",  name: "Nillion",          sector: "AI",     stage: "Series A", amount: 25_000_000, date: "2026-05-17", investors: ["a16z Crypto", "Hack VC"] },
+  { id: "10", name: "Ondo Finance",     sector: "RWA",    stage: "Series B", amount: 46_000_000, date: "2026-05-14", investors: ["BlackRock Strategic", "Coinbase Ventures"] },
+  { id: "11", name: "EigenLayer AVS",   sector: "L1",     stage: "Series A", amount: 18_000_000, date: "2026-06-04", investors: ["Polychain", "Hack VC"] },
+  { id: "12", name: "Pixelmon",         sector: "GameFi", stage: "Seed",     amount: 7_000_000,  date: "2026-05-31", investors: ["Andreessen Horowitz"] },
 ];
 
 export const mockBTCTreasuries: BTCTreasury[] = [
@@ -33,10 +35,10 @@ export const mockBTCTreasuries: BTCTreasury[] = [
 ];
 
 export const mockBTCPurchases: BTCPurchase[] = [
-  { date: "2026-05-05", amount: 1_500, price: 91_200, totalValue: 136_800_000 },
-  { date: "2026-04-28", amount: 2_200, price: 88_400, totalValue: 194_480_000 },
-  { date: "2026-04-15", amount: 800, price: 86_100, totalValue: 68_880_000 },
-  { date: "2026-04-02", amount: 3_100, price: 83_750, totalValue: 259_625_000 },
+  { date: "2026-06-05", amount: 1_500, price: 97_400, totalValue: 146_100_000 },
+  { date: "2026-05-28", amount: 2_200, price: 94_800, totalValue: 208_560_000 },
+  { date: "2026-05-19", amount: 800,   price: 91_200, totalValue: 72_960_000  },
+  { date: "2026-05-12", amount: 3_100, price: 88_500, totalValue: 274_350_000 },
 ];
 
 export const mockStockSnapshots: Record<string, StockSnapshot> = {
@@ -60,11 +62,11 @@ export const mockMacroHistory: MacroEventHistory[] = [
 ];
 
 export const mockNews: NewsItem[] = [
-  { newsId: "n1", title: "VCs pour $200M into DePIN infrastructure this week", summary: "Major institutional investors are accelerating bets on decentralized physical infrastructure...", publishTime: "2026-05-07T08:00:00Z", categories: ["DePIN", "Funding"], currencyCodes: ["IOTX", "HONEY"] },
-  { newsId: "n2", title: "AI agent tokens surge as Kaito raises $8.5M", summary: "The AI narrative is gaining fresh momentum after Kaito AI secured funding from top VCs...", publishTime: "2026-05-06T14:30:00Z", categories: ["AI", "Funding"], currencyCodes: ["KAI", "AGIX"] },
-  { newsId: "n3", title: "MicroStrategy adds 1,500 BTC in latest purchase", summary: "Michael Saylor's firm continues systematic accumulation strategy...", publishTime: "2026-05-06T10:00:00Z", categories: ["BTC", "Institutional"], currencyCodes: ["BTC"] },
-  { newsId: "n4", title: "BlackRock Bitcoin ETF sees $245M single-day inflow", summary: "IBIT recorded its fourth-largest daily inflow of the year...", publishTime: "2026-05-07T09:00:00Z", categories: ["ETF", "BTC"], currencyCodes: ["BTC"] },
-  { newsId: "n5", title: "RWA tokenization crosses $20B in on-chain value", summary: "Real-world asset protocols led by Ondo Finance and Plume reach new milestones...", publishTime: "2026-05-05T16:00:00Z", categories: ["RWA", "DeFi"], currencyCodes: ["ONDO", "PLUME"] },
+  { newsId: "n1", title: "VCs pour $200M into DePIN infrastructure this week", summary: "Major institutional investors are accelerating bets on decentralized physical infrastructure...", publishTime: "2026-06-08T08:00:00Z", categories: ["DePIN", "Funding"], currencyCodes: ["IOTX", "HONEY"] },
+  { newsId: "n2", title: "AI agent tokens surge as Kaito raises $8.5M", summary: "The AI narrative is gaining fresh momentum after Kaito AI secured funding from top VCs...", publishTime: "2026-06-07T14:30:00Z", categories: ["AI", "Funding"], currencyCodes: ["KAI", "AGIX"] },
+  { newsId: "n3", title: "MicroStrategy adds 1,500 BTC in latest purchase", summary: "Michael Saylor's firm continues systematic accumulation strategy...", publishTime: "2026-06-07T10:00:00Z", categories: ["BTC", "Institutional"], currencyCodes: ["BTC"] },
+  { newsId: "n4", title: "BlackRock Bitcoin ETF sees $245M single-day inflow", summary: "IBIT recorded its fourth-largest daily inflow of the year...", publishTime: "2026-06-08T09:00:00Z", categories: ["ETF", "BTC"], currencyCodes: ["BTC"] },
+  { newsId: "n5", title: "RWA tokenization crosses $20B in on-chain value", summary: "Real-world asset protocols led by Ondo Finance and Plume reach new milestones...", publishTime: "2026-06-06T16:00:00Z", categories: ["RWA", "DeFi"], currencyCodes: ["ONDO", "PLUME"] },
 ];
 
 export const mockSectorData: SectorData = {

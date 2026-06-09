@@ -19,9 +19,14 @@ export default function MarketTicker() {
     return () => clearInterval(id);
   }, []);
 
-  if (!tickers.length) return null;
+  const valid = tickers.filter(t => {
+    const p = parseFloat(t.lastPrice);
+    return !isNaN(p) && p > 0;
+  });
 
-  const items = [...tickers, ...tickers]; // double for seamless loop
+  if (!valid.length) return null;
+
+  const items = [...valid, ...valid]; // double for seamless loop
 
   return (
     <div className="border-b border-terminal-border bg-terminal-surface overflow-hidden">
@@ -32,14 +37,16 @@ export default function MarketTicker() {
         <div className="overflow-hidden flex-1">
           <div className="flex gap-8 px-4 py-2" style={{ animation: "ticker 40s linear infinite" }}>
             {items.map((t, i) => {
+              const price = parseFloat(t.lastPrice);
               const pct   = parseFloat(t.priceChangePercent);
-              const color = pct >= 0 ? "text-signal-strong" : "text-signal-none";
+              const pctSafe = isNaN(pct) ? 0 : pct;
+              const color = pctSafe >= 0 ? "text-signal-strong" : "text-signal-none";
               return (
                 <span key={`${t.symbol}-${i}`} className="text-xs whitespace-nowrap shrink-0">
                   <span className="text-terminal-bright font-bold">{t.symbol}</span>
-                  <span className="text-terminal-text ml-2">${parseFloat(t.lastPrice).toLocaleString()}</span>
+                  <span className="text-terminal-text ml-2">${price.toLocaleString()}</span>
                   <span className={`ml-1 ${color}`}>
-                    {pct >= 0 ? "+" : ""}{pct.toFixed(2)}%
+                    {pctSafe >= 0 ? "+" : ""}{pctSafe.toFixed(2)}%
                   </span>
                 </span>
               );
