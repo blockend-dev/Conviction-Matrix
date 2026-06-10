@@ -2,7 +2,45 @@
 
 > **Stop trading news. Start trading conviction.**
 
-**Live Demo:** [conviction-matrix.vercel.app](https://conviction-matrix.vercel.app/) · **Notion Submission:** [Docs](https://tundra-icon-9ac.notion.site/Conviction-Matrix-Wave-1-Submission-35a10f526b268026b72fc2071fe45154?pvs=73)
+**Live Demo:** [conviction-matrix.vercel.app](https://conviction-matrix.vercel.app/) · **Waves Submission:** [Notion Doc](https://tundra-icon-9ac.notion.site/Conviction-Matrix-Wave-1-Submission-35a10f526b268026b72fc2071fe45154?pvs=73)
+
+---
+
+## Wave 2 — What We Built
+
+Wave 2 hardened the live data pipeline: the SoSoValue API integration was fully debugged against the real production API, all conviction scores now compute correctly from live data, and the backtesting panel was shipped as a deterministic synthetic simulation.
+
+### API Integration — Production-Grade
+
+Wave 1 shipped with a working mock fallback. Wave 2 made the live API path actually work.
+
+**News feed (was broken, now live):** The SoSoValue news endpoint returns a paginated object `{page, page_size, total, list: [...]}` — not a flat array. The client was rewritten to extract `.list`, strip HTML from the `content` field for clean summaries, parse millisecond Unix timestamps safely, and map integer category codes to human-readable labels. Auth header corrected from `Authorization: Bearer` to `x-soso-api-key`.
+
+**NaN conviction scores (root cause fixed):** SoSoValue's Java/Kotlin backend serializes `BigDecimal` and `Long` fields as JSON strings (e.g. `"318000000"` instead of `318000000`). The `??` operator passes strings through silently, so arithmetic like `0 + "318000000"` produced `NaN` across every sector score. Fixed with a single `n()` coercion helper applied to every numeric field in every mapper:
+
+```typescript
+function n(v: unknown): number { return Number(v) || 0; }
+```
+
+**Timeout / sequential call fix:** The institutional signal layer was fetching 4 stock snapshots sequentially inside a for-loop, with an 8-second timeout on each. That stacked to 32 seconds worst-case — beyond the API route limit. Refactored to `Promise.all`, capping worst-case at 8 seconds regardless of how many tickers are queried.
+
+**8-second AbortController timeout:** Every `fetch()` call now has a hard 8-second abort with a safe fallback to mock data, replacing the OS TCP timeout (~30s) that was silently hanging requests.
+
+**Fundraising layer:** The SoSoValue `/fundraising/projects` list endpoint only returns `project_id` + `project_name` — no sector, amount, or date. Layer 1 uses curated mock data until a richer endpoint or alternative source is available. This is documented in the engine rather than papered over.
+
+### Backtesting Panel
+
+The backtesting page shipped as a deterministic synthetic simulation using a seeded LCG (linear congruential generator). Given a date range and sector, it produces fully consistent fictional returns that look and feel like real backtested data without requiring a historical score database. True backtesting (replaying historical conviction scores vs. actual price) requires a database that stores scores over time — that's Wave 3.
+
+### Build (Wave 2)
+
+```text
+✓ next build: compiled successfully
+✓ TypeScript: zero errors
+✓ All 8 sectors: real numeric conviction scores (no NaN)
+✓ Live news feed: real SoSoValue articles with HTML stripped
+✓ Backtesting panel: deterministic synthetic simulation
+```
 
 ---
 
@@ -14,7 +52,7 @@ Wave 1 delivered a fully working institutional signal convergence engine, scored
 
 We built a 3-layer conviction scoring algorithm that runs in parallel across AI, DePIN, RWA, DeFi, L2, L1, GameFi, and Meme sectors every 5 minutes. Each sector gets a composite score from 0–100 based on where institutional money is actually moving — not what the news is saying.
 
-```
+```text
 Conviction Score = L1 × 30% + L2 × 35% + L3 × 35%
 ```
 
@@ -196,5 +234,16 @@ src/
 | AI | Claude Haiku (Anthropic SDK) |
 | Charts | Recharts |
 | Deploy | Vercel |
+
+---
+
+## Wave 3 Roadmap
+
+- [ ] RainbowKit wallet connect for seamless one-click execution
+- [ ] SoDEX testnet live order execution with connected wallet
+- [ ] True backtesting — store conviction scores to DB, replay vs. actual sector price returns
+- [ ] Conviction alerts — push notification when score crosses 60 or 75 threshold
+- [ ] Price chart (SoDEX klines) inside the signal drill-down panel
+- [ ] Fundraising Layer 1 upgrade — per-project detail calls or alternative data source for real sector scoring
 
 ---
