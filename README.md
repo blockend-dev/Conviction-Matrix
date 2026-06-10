@@ -100,7 +100,6 @@ Bloomberg-dark terminal theme. The main view shows all 8 sectors as score cards 
 ✓ TypeScript: zero errors
 ✓ 4 API routes: /api/conviction, /api/execute, /api/markets, /api/news
 ✓ 7 pages generated
-✓ 13 git commits — full development history from scaffold to working build
 ```
 
 ---
