@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.51.0",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "^5.101.0",
+    "@vercel/postgres": "^0.10.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "ethers": "^6.13.5",

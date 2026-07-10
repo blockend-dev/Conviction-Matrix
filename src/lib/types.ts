@@ -41,6 +41,14 @@ export interface MacroConfirmation {
   macroScore: number;            // 0-100
 }
 
+export interface SignalConfidence {
+  total: number;
+  confirmed: number;
+  rate: number;
+  wilsonLower: number;
+  label: "HIGH" | "MODERATE" | "LOW" | "INSUFFICIENT";
+}
+
 export interface ConvictionSignal {
   sector: Sector;
   layer1Score: number;           // Fundraising (0-100)
@@ -51,6 +59,7 @@ export interface ConvictionSignal {
   tokens: string[];              // Top tokens in sector
   narrative: string;             // Claude-generated narrative
   lastUpdated: string;
+  confidence?: SignalConfidence | null; // Historical thesis verification rate
   fundraising?: FundraisingSignal;
   institutional?: InstitutionalSignal;
   macro?: MacroConfirmation;
