@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
       "lokijs": false,
       "encoding": false,
     };
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "zod/mini": require.resolve("zod"),
+    };
     return config;
   },
 };
