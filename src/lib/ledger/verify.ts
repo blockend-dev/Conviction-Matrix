@@ -80,7 +80,10 @@ export async function runVerificationBatch(
   if (!DB_AVAILABLE) return { processed: 0, verified: 0, disconfirmed: 0 };
 
   const pending = await getPendingVerifications(horizonDays);
-  if (!pending.length) return { processed: 0, verified: 0, disconfirmed: 0 };
+  if (!pending.length) {
+    await refreshSignalAccuracy();
+    return { processed: 0, verified: 0, disconfirmed: 0 };
+  }
 
   const current = await fetchLiveSignals();
   let verified = 0;
