@@ -89,6 +89,13 @@ export default function Home() {
             )}
             <ConvictionAlerts signals={signals} />
             <Link
+              href="/verify"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-signal-strong/40 rounded text-xs text-signal-strong hover:bg-signal-strong/10 transition-colors"
+            >
+              <Activity size={12} />
+              Verify
+            </Link>
+            <Link
               href="/backtest"
               className="flex items-center gap-1.5 px-3 py-1.5 border border-terminal-border rounded text-xs text-terminal-text hover:text-terminal-bright hover:border-terminal-bright transition-colors"
             >

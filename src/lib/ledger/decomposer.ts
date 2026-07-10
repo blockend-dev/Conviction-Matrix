@@ -13,6 +13,9 @@ function getClient(): Anthropic | null {
   return _client;
 }
 
+// Generates 3 machine-verifiable hypotheses for a signal via Haiku.
+// Each maps to one of the 3 thesis verification dimensions (etf / treasury / macro).
+// Runs non-blocking — caller should fire-and-forget then UPDATE predictions when resolved.
 export async function generateHypotheses(
   signal: ConvictionSignal
 ): Promise<Hypothesis[] | null> {

@@ -53,6 +53,43 @@ export default function SignalDetail({ signal, onClose, onExecute }: Props) {
         </div>
       </div>
 
+      {/* Thesis Verification */}
+      <div className="border border-terminal-border rounded-lg p-3 bg-terminal-bg">
+        <p className="text-xs text-terminal-text mb-2">◈ THESIS VERIFICATION TRACK RECORD</p>
+        {signal.confidence && signal.confidence.label !== "INSUFFICIENT" ? (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className={clsx(
+                "text-lg font-black",
+                signal.confidence.label === "HIGH"     ? "text-signal-strong" :
+                signal.confidence.label === "MODERATE" ? "text-signal-mild" :
+                "text-signal-weak"
+              )}>
+                {Math.round(signal.confidence.wilsonLower * 100)}%+
+              </span>
+              <span className={clsx(
+                "text-xs font-mono px-2 py-0.5 rounded border",
+                signal.confidence.label === "HIGH"     && "text-signal-strong border-signal-strong/40",
+                signal.confidence.label === "MODERATE" && "text-signal-mild border-signal-mild/40",
+                signal.confidence.label === "LOW"      && "text-signal-weak border-signal-weak/40",
+              )}>
+                {signal.confidence.label}
+              </span>
+            </div>
+            <p className="text-xs text-terminal-text">
+              {signal.confidence.confirmed}/{signal.confidence.total} theses confirmed at 7-day horizon
+            </p>
+            <p className="text-xs text-terminal-text/50">
+              Wilson 95% CI lower bound — conservative estimate
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-terminal-text/50">
+            Building track record — needs 10+ predictions. Every conviction call is logged and verified at T+7 and T+30.
+          </p>
+        )}
+      </div>
+
       {/* Claude Narrative */}
       {signal.narrative && (
         <div className="border border-terminal-border rounded-lg p-3 bg-terminal-bg">

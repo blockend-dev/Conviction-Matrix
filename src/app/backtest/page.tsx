@@ -1,144 +1,106 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Legend,
 } from "recharts";
 import type { Sector } from "@/lib/types";
+import type { SectorAccuracy, AccuracyStat } from "@/lib/ledger/accuracy";
+import type { StoredPrediction } from "@/lib/ledger/store";
 
 const SECTORS: Sector[] = ["AI", "DePIN", "RWA", "DeFi", "L2", "L1", "GameFi", "Meme"];
 
-// Deterministic LCG
-function seeded(seed: number) {
-  let s = ((seed * 1664525 + 1013904223) >>> 0);
-  return () => {
-    s = ((s * 1664525 + 1013904223) >>> 0);
-    return s / 0x100000000;
-  };
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface SummaryData {
+  accuracy: SectorAccuracy[];
+  predictions: StoredPrediction[];
+  totalCount: number;
+  ledgerEnabled: boolean;
 }
 
-// Box-Muller normal distribution
-function gaussian(rng: () => number): number {
-  const u1 = Math.max(rng(), 1e-10);
-  const u2 = rng();
-  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+interface TierStats {
+  winRate: number;
+  avgReturn: number;
+  count: number;
+  wilsonLower: number;
+  label: AccuracyStat["label"];
 }
 
-// Expected 14-day return per score tier (realistic, not perfect)
-function expectedReturn(score: number): number {
-  if (score >= 75) return 8.2;
-  if (score >= 60) return 4.1;
-  if (score >= 40) return 0.8;
-  return -3.4;
-}
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-type DayRecord = {
-  day: number;
-  date: string;
-  score: number;
-  direction: string;
-  fwd14: number;
-  cumReturn: number;
-};
-
-// Sector base levels — reflects real narrative strength during the period
-const SECTOR_BASE: Record<string, number> = {
-  AI: 68, DePIN: 61, RWA: 58, DeFi: 52,
-  L2: 55, L1: 50, GameFi: 38, Meme: 32,
-};
-
-function generateHistory(sector: Sector): DayRecord[] {
-  const hash = [...sector].reduce((a, c) => a * 31 + c.charCodeAt(0), 7);
-  const scoreRng = seeded(hash);
-  const priceRng = seeded(hash + 31337);
-  const fwdRng   = seeded(hash + 99991);
-
-  const base = SECTOR_BASE[sector] ?? 50;
-  let score = base;
-  let cumReturn = 0;
-
-  const today = new Date();
-  const records: DayRecord[] = [];
-
-  for (let i = 89; i >= 0; i--) {
-    // Mean-reverting score walk
-    score = score * 0.93 + base * 0.07 + gaussian(scoreRng) * 7;
-    score = Math.max(8, Math.min(96, score));
-    const sc = Math.round(score);
-
-    // Daily price change: weak signal + noise
-    const dailyPriceChange = (score - 50) * 0.008 + gaussian(priceRng) * 2.2;
-    cumReturn += dailyPriceChange;
-
-    // 14-day forward return: normal distribution centered on tier expected return
-    const mu = expectedReturn(sc);
-    const fwd14 = i >= 14 ? mu + gaussian(fwdRng) * 11.5 : 0;
-
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-
-    records.push({
-      day: 89 - i,
-      date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      score: sc,
-      direction: sc >= 75 ? "STRONG_BUY" : sc >= 60 ? "BUY" : sc >= 40 ? "NEUTRAL" : "SELL",
-      fwd14: Math.round(fwd14 * 10) / 10,
-      cumReturn: Math.round(cumReturn * 10) / 10,
-    });
-  }
-
-  return records;
-}
-
-type TierStats = { winRate: number; avgReturn: number; count: number; bestReturn: number; worstReturn: number };
-
-function computeTierStats(records: DayRecord[], min: number, max: number): TierStats {
-  const tier = records.filter(r => r.score >= min && r.score < max && r.day < 76);
-  if (!tier.length) return { winRate: 0, avgReturn: 0, count: 0, bestReturn: 0, worstReturn: 0 };
-  const wins = tier.filter(r => r.fwd14 > 0).length;
-  const avg  = tier.reduce((s, r) => s + r.fwd14, 0) / tier.length;
-  const best = Math.max(...tier.map(r => r.fwd14));
-  const worst = Math.min(...tier.map(r => r.fwd14));
+function statToTier(stat: AccuracyStat): TierStats {
   return {
-    winRate: Math.round((wins / tier.length) * 100),
-    avgReturn: Math.round(avg * 10) / 10,
-    count: tier.length,
-    bestReturn: Math.round(best * 10) / 10,
-    worstReturn: Math.round(worst * 10) / 10,
+    winRate: Math.round(stat.rate * 100),
+    avgReturn: 0, // not tracked in ledger — we track thesis accuracy not price returns
+    count: stat.total,
+    wilsonLower: stat.wilsonLower,
+    label: stat.label,
   };
 }
 
-type SignalEvent = { sector: Sector; date: string; score: number; fwd14: number; win: boolean };
-
-function extractSignalEvents(sector: Sector, history: DayRecord[]): SignalEvent[] {
-  const events: SignalEvent[] = [];
-  for (let i = 1; i < history.length - 14; i++) {
-    if (history[i].score >= 75 && history[i - 1].score < 75) {
-      events.push({
-        sector,
-        date: history[i].date,
-        score: history[i].score,
-        fwd14: history[i].fwd14,
-        win: history[i].fwd14 > 0,
-      });
-    }
-  }
-  return events;
+function labelColor(label: AccuracyStat["label"]): string {
+  if (label === "HIGH")     return "text-signal-strong";
+  if (label === "MODERATE") return "text-signal-mild";
+  if (label === "LOW")      return "text-signal-none";
+  return "text-terminal-text";
 }
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number }[]; label?: string }) => {
+function directionBg(direction: string): string {
+  if (direction === "STRONG_BUY") return "text-signal-strong";
+  if (direction === "BUY")        return "text-signal-mild";
+  if (direction === "NEUTRAL")    return "text-signal-neutral";
+  return "text-signal-none";
+}
+
+// Build chart data: prediction points sorted by date, with a rolling verify rate
+function buildChartData(predictions: StoredPrediction[]) {
+  const sorted = [...predictions].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  let cumVerified = 0;
+  let cumTotal = 0;
+
+  return sorted.map((p, i) => {
+    const has7d = p.verifiedAt7d !== null;
+    if (has7d) {
+      cumTotal++;
+      if (p.thesisVerified7d) cumVerified++;
+    }
+    const rollingRate = cumTotal > 0 ? Math.round((cumVerified / cumTotal) * 100) : null;
+    const date = new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return {
+      index: i,
+      date,
+      score: p.score,
+      verified7d: p.thesisVerified7d === null ? null : (p.thesisVerified7d ? 1 : 0),
+      rollingRate,
+    };
+  });
+}
+
+// ── Custom Tooltip ─────────────────────────────────────────────────────────────
+
+const CustomTooltip = ({
+  active, payload, label,
+}: { active?: boolean; payload?: { name: string; value: number | null }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-terminal-surface border border-terminal-border rounded-lg p-3 text-xs space-y-1">
       <p className="text-terminal-text mb-1">{label}</p>
-      {payload.map(p => (
+      {payload.filter(p => p.value !== null).map(p => (
         <p key={p.name} className="text-terminal-bright">
-          {p.name === "score" ? "Conviction" : "Cum. Return"}{": "}
-          <span className={p.name === "cumReturn" ? (p.value >= 0 ? "text-signal-strong" : "text-signal-none") : "text-terminal-bright"}>
-            {p.name === "score" ? `${p.value}/100` : `${p.value >= 0 ? "+" : ""}${p.value}%`}
+          {p.name === "score"       ? "Conviction" :
+           p.name === "rollingRate" ? "Rolling Verify Rate" : "Thesis Verified?"}
+          {": "}
+          <span className={p.name === "rollingRate" ? "text-signal-strong" : "text-terminal-bright"}>
+            {p.name === "score"       ? `${p.value}/100` :
+             p.name === "rollingRate" ? `${p.value}%` :
+             p.value === 1            ? "✓ YES" : "✗ NO"}
           </span>
         </p>
       ))}
@@ -146,35 +108,98 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   );
 };
 
+// ── Main Page ──────────────────────────────────────────────────────────────────
+
 export default function BacktestPage() {
+  const [data, setData] = useState<SummaryData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeSector, setActiveSector] = useState<Sector>("AI");
 
-  const allHistory = useMemo(() =>
-    Object.fromEntries(SECTORS.map(s => [s, generateHistory(s)])) as Record<Sector, DayRecord[]>,
-  []);
+  useEffect(() => {
+    fetch("/api/verify/summary")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
 
-  const allRecords = useMemo(() => SECTORS.flatMap(s => allHistory[s]), [allHistory]);
+  const sectorMap = useMemo(() => {
+    if (!data) return {} as Record<string, SectorAccuracy>;
+    return Object.fromEntries(data.accuracy.map(s => [s.sector, s]));
+  }, [data]);
 
-  const stats = useMemo(() => ({
-    strongBuy: computeTierStats(allRecords, 75, 101),
-    buy:       computeTierStats(allRecords, 60, 75),
-    neutral:   computeTierStats(allRecords, 40, 60),
-    sell:      computeTierStats(allRecords, 0, 40),
-  }), [allRecords]);
+  const activePredictions = useMemo(() => {
+    if (!data) return [];
+    return data.predictions.filter(p => p.sector === activeSector);
+  }, [data, activeSector]);
 
-  const signalLog = useMemo(() =>
-    SECTORS.flatMap(s => extractSignalEvents(s, allHistory[s]))
-      .sort((a, b) => new Date(b.date + " 2026").getTime() - new Date(a.date + " 2026").getTime()),
-  [allHistory]);
+  const chartData = useMemo(() => buildChartData(activePredictions), [activePredictions]);
 
-  const totalSignals = signalLog.length;
-  const totalWins    = signalLog.filter(s => s.win).length;
-  const overallWR    = totalSignals ? Math.round((totalWins / totalSignals) * 100) : 0;
+  const overallStat = useMemo(() => {
+    if (!data?.accuracy.length) return null;
+    const combined = data.accuracy.flatMap(s => [
+      s.horizon7.combined.total, s.horizon7.combined.confirmed
+    ]);
+    const total     = combined.filter((_, i) => i % 2 === 0).reduce((a, b) => a + b, 0);
+    const confirmed = combined.filter((_, i) => i % 2 === 1).reduce((a, b) => a + b, 0);
+    if (total === 0) return null;
+    return { total, confirmed, rate: Math.round((confirmed / total) * 100) };
+  }, [data]);
 
-  const chartData = useMemo(
-    () => allHistory[activeSector].filter((_, i) => i % 3 === 0),
-    [allHistory, activeSector]
-  );
+  const signalLog = useMemo(() => {
+    if (!data?.predictions) return [];
+    return [...data.predictions]
+      .filter(p => p.verifiedAt7d !== null)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 80);
+  }, [data]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-terminal-bg flex items-center justify-center">
+        <div className="flex items-center gap-3 text-terminal-text text-sm">
+          <RefreshCw size={14} className="animate-spin" />
+          Loading track record…
+        </div>
+      </div>
+    );
+  }
+
+  // No ledger connected yet
+  if (!data?.ledgerEnabled || data.totalCount === 0) {
+    return (
+      <div className="min-h-screen bg-terminal-bg">
+        <header className="border-b border-terminal-border px-6 py-4">
+          <div className="max-w-7xl mx-auto flex items-center gap-6">
+            <Link href="/" className="flex items-center gap-2 text-terminal-text hover:text-terminal-bright text-xs transition-colors">
+              <ArrowLeft size={14} /> Dashboard
+            </Link>
+            <div>
+              <h1 className="text-xl font-black text-terminal-bright tracking-tight">◈ TRACK RECORD</h1>
+              <p className="text-xs text-terminal-text mt-0.5">Real prediction verification — every call checked against live SoSoValue data</p>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-12 flex flex-col items-center gap-6 text-center">
+          <Activity size={40} className="text-terminal-text opacity-40" />
+          <div className="space-y-2">
+            <p className="text-terminal-bright font-bold text-lg">Track record is building</p>
+            <p className="text-terminal-text text-sm max-w-md">
+              Conviction calls are logged as structured predictions and verified against SoSoValue capital flow data at T+7 and T+30.
+            </p>
+          </div>
+          <div className="border border-terminal-border rounded-xl p-5 bg-terminal-surface text-left max-w-lg w-full space-y-3 text-xs text-terminal-text">
+            <p className="text-terminal-bright font-bold tracking-wider">TO ENABLE PREDICTION LEDGER</p>
+            <ol className="space-y-2 list-decimal list-inside">
+              <li>Add <code className="text-signal-mild">POSTGRES_URL</code> to <code>.env.local</code> (Vercel Postgres, Neon, or Supabase)</li>
+              <li>Set <code className="text-signal-mild">CRON_SECRET</code> to any random string</li>
+              <li>Call <code className="text-signal-mild">GET /api/setup?secret=YOUR_CRON_SECRET</code> to run migration + seed 90 days of history</li>
+              <li>Vercel Cron re-verifies predictions every 4h automatically</li>
+            </ol>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-terminal-bg">
@@ -184,27 +209,51 @@ export default function BacktestPage() {
             <ArrowLeft size={14} /> Dashboard
           </Link>
           <div>
-            <h1 className="text-xl font-black text-terminal-bright tracking-tight">◈ BACKTEST ENGINE</h1>
+            <h1 className="text-xl font-black text-terminal-bright tracking-tight">◈ TRACK RECORD</h1>
             <p className="text-xs text-terminal-text mt-0.5">
-              90-day signal accuracy · 8 sectors · {totalSignals} STRONG BUY events · overall win rate{" "}
-              <span className="text-signal-strong font-bold">{overallWR}%</span>
+              {data.totalCount} logged predictions · {overallStat ? `${overallStat.rate}% thesis confirmation rate` : "building…"} · verified against live SoSoValue data
             </p>
           </div>
+          <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded text-signal-strong bg-signal-strong/10">
+            ● LIVE DATA
+          </span>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
-        {/* Tier accuracy cards */}
+        {/* Overall tier accuracy cards */}
         <div className="space-y-2">
           <p className="text-xs font-bold text-terminal-text tracking-widest">
-            CONVICTION TIER ACCURACY — 14-DAY FORWARD RETURN
+            THESIS CONFIRMATION BY SECTOR — 7-DAY HORIZON (WILSON 95% CI)
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <TierCard label="STRONG BUY ≥75" stats={stats.strongBuy} scoreColor="text-signal-strong" border="border-signal-strong/30" />
-            <TierCard label="BUY 60–74"       stats={stats.buy}       scoreColor="text-signal-mild"   border="border-signal-mild/30" />
-            <TierCard label="NEUTRAL 40–59"   stats={stats.neutral}   scoreColor="text-signal-neutral" border="border-signal-neutral/30" />
-            <TierCard label="SELL &lt;40"     stats={stats.sell}      scoreColor="text-signal-none"   border="border-signal-none/30" />
+            {SECTORS.slice(0, 4).map(sector => {
+              const acc = sectorMap[sector]?.horizon7.combined;
+              return (
+                <StatCard
+                  key={sector}
+                  label={sector}
+                  stat={acc ?? null}
+                  onClick={() => setActiveSector(sector)}
+                  active={activeSector === sector}
+                />
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {SECTORS.slice(4).map(sector => {
+              const acc = sectorMap[sector]?.horizon7.combined;
+              return (
+                <StatCard
+                  key={sector}
+                  label={sector}
+                  stat={acc ?? null}
+                  onClick={() => setActiveSector(sector)}
+                  active={activeSector === sector}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -213,10 +262,10 @@ export default function BacktestPage() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="text-xs font-bold text-terminal-text tracking-widest">
-                CONVICTION SCORE vs CUMULATIVE PRICE RETURN
+                CONVICTION SCORE + ROLLING VERIFICATION RATE
               </p>
               <p className="text-xs text-terminal-text mt-0.5">
-                90-day window · {activeSector} sector
+                {activeSector} sector · {activePredictions.length} predictions logged
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -236,135 +285,158 @@ export default function BacktestPage() {
             </div>
           </div>
 
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="#1a2d3d" />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: "#8fb3cc", fontSize: 10 }}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                yAxisId="score"
-                domain={[0, 100]}
-                tick={{ fill: "#8fb3cc", fontSize: 10 }}
-                tickLine={false}
-                width={28}
-              />
-              <YAxis
-                yAxisId="price"
-                orientation="right"
-                tick={{ fill: "#8fb3cc", fontSize: 10 }}
-                tickLine={false}
-                width={44}
-                tickFormatter={(v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%`}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine
-                yAxisId="score" y={75}
-                stroke="#00ff8830" strokeDasharray="4 4"
-              />
-              <ReferenceLine
-                yAxisId="score" y={60}
-                stroke="#ffd70020" strokeDasharray="4 4"
-              />
-              <Line
-                yAxisId="score"
-                type="monotone"
-                dataKey="score"
-                stroke="#c8e6f5"
-                strokeWidth={1.5}
-                dot={false}
-                name="score"
-              />
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="cumReturn"
-                stroke="#00ff88"
-                strokeWidth={1.5}
-                dot={false}
-                name="cumReturn"
-                strokeDasharray="5 3"
-              />
-              <Legend
-                formatter={(v: string) => v === "score" ? "Conviction Score" : "Cumulative Return %"}
-                wrapperStyle={{ fontSize: "11px", color: "#8fb3cc", paddingTop: "8px" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#1a2d3d" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "#8fb3cc", fontSize: 10 }}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  yAxisId="score"
+                  domain={[0, 100]}
+                  tick={{ fill: "#8fb3cc", fontSize: 10 }}
+                  tickLine={false}
+                  width={28}
+                />
+                <YAxis
+                  yAxisId="rate"
+                  orientation="right"
+                  domain={[0, 100]}
+                  tick={{ fill: "#8fb3cc", fontSize: 10 }}
+                  tickLine={false}
+                  width={36}
+                  tickFormatter={(v: number) => `${v}%`}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine yAxisId="score" y={75} stroke="#00ff8830" strokeDasharray="4 4" />
+                <ReferenceLine yAxisId="score" y={60} stroke="#ffd70020" strokeDasharray="4 4" />
+                <Line
+                  yAxisId="score"
+                  type="monotone"
+                  dataKey="score"
+                  stroke="#c8e6f5"
+                  strokeWidth={1.5}
+                  dot={false}
+                  name="score"
+                />
+                <Line
+                  yAxisId="rate"
+                  type="monotone"
+                  dataKey="rollingRate"
+                  stroke="#00ff88"
+                  strokeWidth={2}
+                  dot={false}
+                  name="rollingRate"
+                  strokeDasharray="5 3"
+                  connectNulls
+                />
+                <Legend
+                  formatter={(v: string) =>
+                    v === "score" ? "Conviction Score" : "Rolling Confirm Rate %"
+                  }
+                  wrapperStyle={{ fontSize: "11px", color: "#8fb3cc", paddingTop: "8px" }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-terminal-text text-xs">
+              No predictions logged for {activeSector} yet
+            </div>
+          )}
         </div>
 
-        {/* Sector summary table */}
+        {/* Layer breakdown table */}
         <div className="space-y-2">
-          <p className="text-xs font-bold text-terminal-text tracking-widest">SECTOR ACCURACY SUMMARY</p>
-          <div className="border border-terminal-border rounded-xl bg-terminal-surface overflow-hidden">
-            <div className="grid grid-cols-5 gap-2 px-4 py-2 border-b border-terminal-border text-xs text-terminal-text font-bold">
-              <span>SECTOR</span>
-              <span>STRONG BUY EVENTS</span>
-              <span>WIN RATE</span>
-              <span>AVG 14D RETURN</span>
-              <span>BEST / WORST</span>
-            </div>
-            <div className="divide-y divide-terminal-border">
-              {SECTORS.map(s => {
-                const rec = allHistory[s];
-                const st  = computeTierStats(rec, 75, 101);
-                const events = extractSignalEvents(s, rec).length;
-                return (
-                  <div key={s} className="grid grid-cols-5 gap-2 px-4 py-2.5 text-xs hover:bg-terminal-muted transition-colors">
-                    <span className="text-terminal-bright font-bold">{s}</span>
-                    <span className="text-terminal-text">{events} signals</span>
-                    <span className={st.winRate >= 60 ? "text-signal-strong font-bold" : st.winRate >= 50 ? "text-signal-neutral" : "text-signal-none"}>
-                      {st.winRate}%
-                    </span>
-                    <span className={st.avgReturn >= 0 ? "text-signal-strong" : "text-signal-none"}>
-                      {st.avgReturn >= 0 ? "+" : ""}{st.avgReturn}%
-                    </span>
-                    <span className="text-terminal-text">
-                      <span className="text-signal-strong">+{st.bestReturn}%</span>
-                      {" / "}
-                      <span className="text-signal-none">{st.worstReturn}%</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+          <p className="text-xs font-bold text-terminal-text tracking-widest">SECTOR LAYER ACCURACY — 7-DAY HORIZON</p>
+          <div className="border border-terminal-border rounded-xl bg-terminal-surface overflow-x-auto">
+            <table className="w-full text-xs min-w-[600px]">
+              <thead>
+                <tr className="border-b border-terminal-border text-terminal-text font-bold">
+                  <th className="text-left px-4 py-2">SECTOR</th>
+                  <th className="text-center px-3 py-2">COMBINED</th>
+                  <th className="text-center px-3 py-2">ETF FLOW</th>
+                  <th className="text-center px-3 py-2">TREASURY</th>
+                  <th className="text-center px-3 py-2">MACRO</th>
+                  <th className="text-center px-3 py-2">SAMPLES</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-terminal-border">
+                {SECTORS.map(sector => {
+                  const acc = sectorMap[sector]?.horizon7;
+                  if (!acc) return null;
+                  return (
+                    <tr key={sector} className="hover:bg-terminal-muted transition-colors">
+                      <td className="px-4 py-2.5 text-terminal-bright font-bold">{sector}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <StatPill stat={acc.combined} />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <StatPill stat={acc.etf} />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <StatPill stat={acc.treasury} />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <StatPill stat={acc.macro} />
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-terminal-text">
+                        {acc.combined.total}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          <p className="text-xs text-terminal-text">
+            Wilson 95% CI lower bound — conservative estimate that accounts for sample size.
+            HIGH &gt;70% · MODERATE &gt;55% · LOW ≤55% · INSUFFICIENT &lt;10 samples.
+          </p>
         </div>
 
-        {/* Historical signal log */}
+        {/* Verified prediction log */}
         <div className="space-y-2">
           <p className="text-xs font-bold text-terminal-text tracking-widest">
-            HISTORICAL STRONG BUY SIGNAL LOG
+            VERIFIED PREDICTION LOG — LAST {signalLog.length} CALLS
           </p>
           <div className="border border-terminal-border rounded-xl bg-terminal-surface overflow-hidden">
-            <div className="grid grid-cols-5 gap-2 px-4 py-2 border-b border-terminal-border text-xs text-terminal-text font-bold">
+            <div className="grid grid-cols-6 gap-2 px-4 py-2 border-b border-terminal-border text-xs text-terminal-text font-bold">
               <span>DATE</span>
               <span>SECTOR</span>
-              <span>ENTRY SCORE</span>
-              <span>14D RETURN</span>
-              <span>OUTCOME</span>
+              <span>SCORE</span>
+              <span>DIRECTION</span>
+              <span>7d THESIS</span>
+              <span>30d THESIS</span>
             </div>
-            <div className="divide-y divide-terminal-border max-h-72 overflow-y-auto">
-              {signalLog.map((sig, i) => (
-                <div key={i} className="grid grid-cols-5 gap-2 px-4 py-2 text-xs hover:bg-terminal-muted transition-colors">
-                  <span className="text-terminal-text">{sig.date}</span>
-                  <span className="text-terminal-bright font-bold">{sig.sector}</span>
-                  <span className="text-signal-strong font-bold tabular-nums">{sig.score}</span>
-                  <span className={`tabular-nums ${sig.fwd14 >= 0 ? "text-signal-strong" : "text-signal-none"}`}>
-                    {sig.fwd14 >= 0 ? "+" : ""}{sig.fwd14}%
-                  </span>
-                  <span className={sig.win ? "text-signal-strong" : "text-signal-none"}>
-                    {sig.win ? "▲ WIN" : "▼ LOSS"}
-                  </span>
+            <div className="divide-y divide-terminal-border max-h-96 overflow-y-auto">
+              {signalLog.length === 0 ? (
+                <div className="px-4 py-6 text-center text-terminal-text text-xs">
+                  No verified predictions yet — verification runs every 4 hours
                 </div>
-              ))}
+              ) : (
+                signalLog.map(p => (
+                  <div key={p.id} className="grid grid-cols-6 gap-2 px-4 py-2 text-xs hover:bg-terminal-muted transition-colors">
+                    <span className="text-terminal-text">
+                      {new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                    <span className="text-terminal-bright font-bold">{p.sector}</span>
+                    <span className="text-terminal-bright font-bold tabular-nums">{p.score}</span>
+                    <span className={`font-bold ${directionBg(p.direction)}`}>
+                      {p.direction.replace("_", " ")}
+                    </span>
+                    <VerifiedBadge verified={p.thesisVerified7d} components={p.componentsConfirmed7d} />
+                    <VerifiedBadge verified={p.thesisVerified30d} />
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <p className="text-xs text-terminal-text">
-            Failure cases visible above — the model does not claim perfection. A 72% win rate at the STRONG BUY tier is the thesis, not 100%.
+            Thesis confirmed = ≥2/3 conditions met at horizon: ETF flow ≥50% original direction · any BTC purchases · macro score ±15 pts.
           </p>
         </div>
 
@@ -373,31 +445,70 @@ export default function BacktestPage() {
   );
 }
 
-function TierCard({ label, stats, scoreColor, border }: {
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function StatCard({
+  label, stat, onClick, active,
+}: {
   label: string;
-  stats: TierStats;
-  scoreColor: string;
-  border: string;
+  stat: AccuracyStat | null;
+  onClick: () => void;
+  active: boolean;
 }) {
+  const pct = stat && stat.total >= 10
+    ? Math.round(stat.wilsonLower * 100)
+    : null;
+  const color = stat ? labelColor(stat.label) : "text-terminal-text";
+
   return (
-    <div className={`border ${border} rounded-xl p-4 bg-terminal-surface space-y-3`}>
-      <p className={`text-xs font-bold ${scoreColor} tracking-wider`}>{label}</p>
-      <div className="space-y-1.5">
-        <div className="flex justify-between text-xs">
-          <span className="text-terminal-text">Win Rate</span>
-          <span className={`font-black text-sm ${scoreColor}`}>{stats.winRate}%</span>
+    <button
+      onClick={onClick}
+      className={`border rounded-xl p-4 bg-terminal-surface space-y-2 text-left transition-all ${
+        active
+          ? "border-terminal-bright"
+          : "border-terminal-border hover:border-terminal-text"
+      }`}
+    >
+      <p className="text-xs font-bold text-terminal-text tracking-wider">{label}</p>
+      {pct !== null ? (
+        <div className="space-y-0.5">
+          <p className={`text-2xl font-black ${color}`}>{pct}%<span className="text-xs font-normal ml-1">+</span></p>
+          <p className="text-xs text-terminal-text">Wilson lower · n={stat!.total}</p>
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-terminal-text">Avg 14d Return</span>
-          <span className={`font-bold ${stats.avgReturn >= 0 ? "text-signal-strong" : "text-signal-none"}`}>
-            {stats.avgReturn >= 0 ? "+" : ""}{stats.avgReturn}%
-          </span>
+      ) : (
+        <div className="space-y-0.5">
+          <p className="text-sm text-terminal-text">—</p>
+          <p className="text-xs text-terminal-text">n={stat?.total ?? 0}</p>
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-terminal-text">Sample Size</span>
-          <span className="text-terminal-text">{stats.count} obs</span>
-        </div>
-      </div>
-    </div>
+      )}
+    </button>
+  );
+}
+
+function StatPill({ stat }: { stat: AccuracyStat }) {
+  if (stat.total < 10) {
+    return <span className="text-terminal-text opacity-50">—</span>;
+  }
+  return (
+    <span className={`font-bold tabular-nums ${labelColor(stat.label)}`}>
+      {Math.round(stat.wilsonLower * 100)}%+
+    </span>
+  );
+}
+
+function VerifiedBadge({
+  verified, components,
+}: { verified: boolean | null; components?: number | null }) {
+  if (verified === null) return <span className="text-terminal-text opacity-50">pending</span>;
+  if (verified)
+    return (
+      <span className="text-signal-strong font-bold">
+        ✓ {components !== undefined && components !== null ? `${components}/3` : "CONF"}
+      </span>
+    );
+  return (
+    <span className="text-signal-none font-bold">
+      ✗ {components !== undefined && components !== null ? `${components}/3` : "DISC"}
+    </span>
   );
 }

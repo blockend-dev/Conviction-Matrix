@@ -86,6 +86,25 @@ export default function ConvictionCell({ signal, onClick, active }: Props) {
       {/* Direction */}
       <DirectionBadge direction={signal.direction} />
 
+      {/* Thesis verification confidence */}
+      {signal.confidence && signal.confidence.label !== "INSUFFICIENT" ? (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className={clsx(
+            "text-xs font-mono px-1.5 py-0.5 rounded border",
+            signal.confidence.label === "HIGH"     && "text-signal-strong border-signal-strong/40 bg-signal-strong/10",
+            signal.confidence.label === "MODERATE" && "text-signal-mild border-signal-mild/40 bg-signal-mild/10",
+            signal.confidence.label === "LOW"      && "text-signal-weak border-signal-weak/40 bg-signal-weak/10",
+          )}>
+            {Math.round(signal.confidence.wilsonLower * 100)}% verified
+          </span>
+          <span className="text-xs text-terminal-text/50">7d · n={signal.confidence.total}</span>
+        </div>
+      ) : (
+        <div className="mt-2">
+          <span className="text-xs text-terminal-text/40 font-mono">building track record…</span>
+        </div>
+      )}
+
       {/* Top tokens */}
       <div className="mt-2 flex flex-wrap gap-1">
         {signal.tokens.slice(0, 3).map(t => (
