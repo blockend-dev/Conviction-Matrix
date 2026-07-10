@@ -1,12 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/verify/run",
-      "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/calibrate",
-      "schedule": "0 8 * * 1"
-    }
-  ]
-}
+{}

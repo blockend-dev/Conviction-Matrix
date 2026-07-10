@@ -234,78 +234,88 @@ export async function calibrateWeights(): Promise<void> {
   const MIN_SAMPLES = 30;
 
   for (const sector of sectors) {
-    const isAll = sector === "ALL";
-    const layerRows = isAll
-      ? await sql`
-          SELECT layer, SUM(total_calls)::int AS total, SUM(confirmed_calls)::int AS confirmed
-          FROM signal_accuracy
-          WHERE horizon_days = 7 AND sector != 'ALL'
-          GROUP BY layer
-        `
-      : await sql`
-          SELECT layer, total_calls AS total, confirmed_calls AS confirmed
-          FROM signal_accuracy
-          WHERE sector = ${sector} AND horizon_days = 7
-        `;
+    try {
+      const isAll = sector === "ALL";
+      const layerRows = isAll
+        ? await sql`
+            SELECT layer,
+                   SUM(total_calls)     AS total,
+                   SUM(confirmed_calls) AS confirmed
+            FROM signal_accuracy
+            WHERE horizon_days = 7 AND sector != 'ALL'
+            GROUP BY layer
+          `
+        : await sql`
+            SELECT layer, total_calls AS total, confirmed_calls AS confirmed
+            FROM signal_accuracy
+            WHERE sector = ${sector} AND horizon_days = 7
+          `;
 
-    const find = (layer: string) =>
-      layerRows.rows.find(r => r.layer === layer);
+      const find = (layer: string) =>
+        layerRows.rows.find(r => r.layer === layer);
 
-    const etfRow     = find("etf");
-    const treasuryRow = find("treasury");
-    const macroRow   = find("macro");
+      const etfRow      = find("etf");
+      const treasuryRow = find("treasury");
+      const macroRow    = find("macro");
 
-    const etfTotal = Number(etfRow?.total ?? 0);
-    const treasuryTotal = Number(treasuryRow?.total ?? 0);
-    const macroTotal = Number(macroRow?.total ?? 0);
+      const etfTotal      = Number(etfRow?.total      ?? 0);
+      const treasuryTotal = Number(treasuryRow?.total ?? 0);
+      const macroTotal    = Number(macroRow?.total    ?? 0);
 
-    if (etfTotal < MIN_SAMPLES || treasuryTotal < MIN_SAMPLES || macroTotal < MIN_SAMPLES) continue;
+      if (etfTotal < MIN_SAMPLES || treasuryTotal < MIN_SAMPLES || macroTotal < MIN_SAMPLES) {
+        console.log(`[calibrate] ${sector} skipped — insufficient samples (etf=${etfTotal}, treasury=${treasuryTotal}, macro=${macroTotal})`);
+        continue;
+      }
 
-    const etfAcc      = Number(etfRow!.confirmed) / etfTotal;
-    const treasuryAcc = Number(treasuryRow!.confirmed) / treasuryTotal;
-    const macroAcc    = Number(macroRow!.confirmed) / macroTotal;
+      const etfAcc      = Number(etfRow!.confirmed)      / etfTotal;
+      const treasuryAcc = Number(treasuryRow!.confirmed) / treasuryTotal;
+      const macroAcc    = Number(macroRow!.confirmed)    / macroTotal;
 
-    // Map layers: L1 ~ macro environment, L2 ~ treasury buying, L3 ~ ETF flow
-    const rawArr = [macroAcc, treasuryAcc, etfAcc];
-    const rawSum = rawArr.reduce((a, b) => a + b, 0);
-    const normed = rawArr.map(v => v / rawSum);
+      // Map layers: L1 ~ macro environment, L2 ~ treasury buying, L3 ~ ETF flow
+      const rawArr  = [macroAcc, treasuryAcc, etfAcc];
+      const rawSum  = rawArr.reduce((a, b) => a + b, 0);
+      const normed  = rawArr.map(v => v / rawSum);
 
-    // 60% empirical, 40% defaults — dampens overfitting on moderate sample sizes
-    const blended = normed.map((v, i) => v * 0.6 + DEFAULTS[i] * 0.4);
-    const blendedSum = blended.reduce((a, b) => a + b, 0);
-    const [l1, l2, l3] = blended.map(v =>
-      Math.round((v / blendedSum) * 10000) / 10000
-    );
+      // 60% empirical, 40% defaults — dampens overfitting on moderate sample sizes
+      const blended    = normed.map((v, i) => v * 0.6 + DEFAULTS[i] * 0.4);
+      const blendedSum = blended.reduce((a, b) => a + b, 0);
+      const [l1, l2, l3] = blended.map(v =>
+        Math.round((v / blendedSum) * 10000) / 10000
+      );
 
-    // Fetch previous weights for comparison (used in AI reasoning note)
-    const prevWeightRows = await sql`
-      SELECT l1_weight, l2_weight, l3_weight
-      FROM model_weights
-      WHERE sector = ${sector}
-      ORDER BY effective_from DESC
-      LIMIT 1
-    `;
-    const prev = prevWeightRows.rows[0];
-    const prevL1 = prev ? Number(prev.l1_weight) : DEFAULTS[0];
-    const prevL2 = prev ? Number(prev.l2_weight) : DEFAULTS[1];
-    const prevL3 = prev ? Number(prev.l3_weight) : DEFAULTS[2];
+      // Fetch previous weights for comparison (used in AI reasoning note)
+      const prevWeightRows = await sql`
+        SELECT l1_weight, l2_weight, l3_weight
+        FROM model_weights
+        WHERE sector = ${sector}
+        ORDER BY effective_from DESC
+        LIMIT 1
+      `;
+      const prev  = prevWeightRows.rows[0];
+      const prevL1 = prev ? Number(prev.l1_weight) : DEFAULTS[0];
+      const prevL2 = prev ? Number(prev.l2_weight) : DEFAULTS[1];
+      const prevL3 = prev ? Number(prev.l3_weight) : DEFAULTS[2];
 
-    // AI-generated quant reasoning note (Haiku — falls back to plain data summary)
-    const note = await generateCalibrationNote(
-      sector,
-      prevL1, prevL2, prevL3,
-      l1, l2, l3,
-      etfAcc, treasuryAcc, macroAcc,
-      etfTotal
-    );
+      // AI-generated quant reasoning note (Haiku — falls back to plain data summary)
+      const note = await generateCalibrationNote(
+        sector,
+        prevL1, prevL2, prevL3,
+        l1, l2, l3,
+        etfAcc, treasuryAcc, macroAcc,
+        etfTotal
+      );
 
-    await sql`
-      INSERT INTO model_weights
-        (sector, l1_weight, l2_weight, l3_weight, sample_size, calibration_note)
-      VALUES
-        (${sector}, ${l1}, ${l2}, ${l3}, ${etfTotal}, ${note})
-    `;
-    console.log(`[calibrate] ${sector} → L1=${l1} L2=${l2} L3=${l3} (n=${etfTotal})`);
+      await sql`
+        INSERT INTO model_weights
+          (sector, l1_weight, l2_weight, l3_weight, sample_size, calibration_note)
+        VALUES
+          (${sector}, ${l1}, ${l2}, ${l3}, ${etfTotal}, ${note})
+      `;
+      console.log(`[calibrate] ${sector} → L1=${l1} L2=${l2} L3=${l3} (n=${etfTotal})`);
+    } catch (err) {
+      console.error(`[calibrate] ${sector} failed:`, err);
+      // continue to next sector — one failure doesn't abort the batch
+    }
   }
 
   console.log("[accuracy] weight calibration complete");
