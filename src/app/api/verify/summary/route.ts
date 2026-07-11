@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const [accuracy, predictions, total] = await Promise.all([
       getAllAccuracy(),
-      getRecentPredictions(60),
+      getRecentPredictions(720),
       getPredictionCount(),
     ]);
 

@@ -221,7 +221,7 @@ export default function VerifyPage() {
           <div className="border border-terminal-border rounded-lg overflow-hidden">
             <div className="bg-terminal-surface border-b border-terminal-border px-4 py-3 flex justify-between items-center">
               <p className="text-xs font-mono text-terminal-text/60 uppercase tracking-wider">Prediction Ledger</p>
-              <p className="text-xs text-terminal-text/40">Showing last 60 predictions</p>
+              <p className="text-xs text-terminal-text/40">Showing last {summary.predictions.length} predictions</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
