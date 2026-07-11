@@ -88,3 +88,24 @@ export const mockIndexSnapshots: IndexSnapshot[] = [
   { ticker: "SSIRWA", value: 445.2, change24h: 2.8 },
   { ticker: "SSIDEFI", value: 2341.0, change24h: 2.1 },
 ];
+
+// Deterministic 90-day ETF history for seeding — newest first (index 0 = today).
+// Uses sine waves so there's realistic variance without Math.random().
+export function generateMockETFHistory(days: number): ETFSummary[] {
+  const result: ETFSummary[] = [];
+  let netAsset = 118_400_000_000;
+  for (let i = 0; i < days; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    // 30-day institutional cycle + 7-day weekly cycle + slight positive bias
+    const primary = Math.sin(i * (2 * Math.PI / 30)) * 350_000_000;
+    const weekly  = Math.sin(i * (2 * Math.PI / 7))  * 120_000_000;
+    const totalNetFlow = Math.round(primary + weekly + 80_000_000);
+    const btcFlow = Math.round(totalNetFlow * 0.77);
+    const ethFlow = totalNetFlow - btcFlow;
+    netAsset = Math.max(100_000_000_000, netAsset - totalNetFlow * 0.0005);
+    result.push({ date, totalNetFlow, btcFlow, ethFlow, totalNetAsset: Math.round(netAsset) });
+  }
+  return result;
+}

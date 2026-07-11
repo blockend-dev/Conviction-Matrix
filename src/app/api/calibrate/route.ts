@@ -25,6 +25,14 @@ export async function GET(req: NextRequest) {
   }
 
   const t0 = Date.now();
-  await calibrateWeights();
-  return NextResponse.json({ ok: true, elapsed: Date.now() - t0 });
+  try {
+    await calibrateWeights();
+    return NextResponse.json({ ok: true, elapsed: Date.now() - t0 });
+  } catch (err) {
+    console.error("[calibrate] route error:", err);
+    return NextResponse.json(
+      { ok: false, error: String(err) },
+      { status: 500 }
+    );
+  }
 }

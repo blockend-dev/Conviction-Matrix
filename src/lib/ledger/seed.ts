@@ -3,7 +3,7 @@
 // Safe to run multiple times (ON CONFLICT DO NOTHING).
 import { DB_AVAILABLE } from "../db";
 import { getETFSummaryHistory } from "../sosovalue/client";
-import { mockETFHistory } from "../sosovalue/mock";
+import { generateMockETFHistory } from "../sosovalue/mock";
 import { insertPredictionAt, insertVerification, getPredictionCount } from "./store";
 import { evaluateHistoricalThesis } from "./verify";
 import { refreshSignalAccuracy } from "./accuracy";
@@ -56,23 +56,27 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
 }
 
-export async function seedHistoricalData(): Promise<{ inserted: number; verified: number; skipped: boolean }> {
+export async function seedHistoricalData(force = false): Promise<{ inserted: number; verified: number; skipped: boolean }> {
   if (!DB_AVAILABLE) return { inserted: 0, verified: 0, skipped: true };
 
-  // Don't re-seed if we already have significant data
-  const existing = await getPredictionCount();
-  if (existing > 100) {
-    console.log(`[seed] skipping — ${existing} predictions already exist`);
-    return { inserted: 0, verified: 0, skipped: true };
+  // Don't re-seed if we already have significant data (unless forced by reset)
+  if (!force) {
+    const existing = await getPredictionCount();
+    if (existing > 100) {
+      console.log(`[seed] skipping — ${existing} predictions already exist`);
+      return { inserted: 0, verified: 0, skipped: true };
+    }
   }
 
   const useApiKey = !!(process.env.SOSOVALUE_API_KEY &&
     process.env.SOSOVALUE_API_KEY !== "your_sosovalue_api_key_here");
 
+  const mock90 = generateMockETFHistory(90);
+
   // Fetch 90 days of ETF history — this is our ground truth for L3
   const etfHistory = useApiKey
-    ? await safe(() => getETFSummaryHistory(90), mockETFHistory)
-    : mockETFHistory;
+    ? await safe(() => getETFSummaryHistory(90), mock90)
+    : mock90;
 
   // Need at least 14 days for T+7 verifications to make sense
   if (etfHistory.length < 7) {
