@@ -22,6 +22,19 @@ const SECTOR_BASE_SCORES: Record<string, { l1: number; l2: number }> = {
   Meme:   { l1: 20, l2: 30 },
 };
 
+// BTC purchase threshold per sector — lower = purchases occur more frequently.
+// Reflects each sector's institutional BTC correlation.
+const SECTOR_BTC_THRESHOLD: Record<string, number> = {
+  AI:     -0.60,
+  L1:     -0.50,
+  L2:     -0.30,
+  DeFi:   -0.20,
+  RWA:     0.00,
+  DePIN:   0.10,
+  GameFi:  0.30,
+  Meme:    0.50,
+};
+
 // How much each sector amplifies the global ETF/macro signal
 // AI tracks macro more tightly; Meme tracks it loosely
 const SECTOR_MACRO_SENSITIVITY: Record<string, number> = {
@@ -54,6 +67,26 @@ function scoreToDirection(score: number): string {
 
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
+}
+
+// Computes per-day, per-sector signals so each dimension varies independently.
+// dayIndex is the ETF history array index (0 = today, n = n days ago).
+function computeDaySignals(
+  etfNetFlow: number,
+  dayIndex: number,
+  sector: string,
+  sensitivity: number
+): { adjustedEtfFlow: number; macroScoreRaw: number; btcPurchases: number } {
+  const adjustedEtfFlow = etfNetFlow * sensitivity;
+  // Macro score tracks ETF flow magnitude — same logic as live engine
+  const macroScoreRaw = Math.round(Math.min(100, Math.max(0, 50 + (etfNetFlow / 1_000_000_000) * 30)));
+  // BTC purchases: deterministic by day + sector-specific frequency threshold
+  const purchaseSignal = Math.sin(dayIndex * 1.7 + 0.5);
+  const threshold = SECTOR_BTC_THRESHOLD[sector] ?? 0;
+  const btcPurchases = purchaseSignal > threshold
+    ? Math.round(Math.abs(purchaseSignal) * 1500 + 200)
+    : 0;
+  return { adjustedEtfFlow, macroScoreRaw, btcPurchases };
 }
 
 export async function seedHistoricalData(force = false): Promise<{ inserted: number; verified: number; skipped: boolean }> {
@@ -97,15 +130,13 @@ export async function seedHistoricalData(force = false): Promise<{ inserted: num
     // Normalize to midnight to avoid duplicate timestamps per day
     createdAt.setHours(12, 0, 0, 0);
 
-    const etfNetFlow = dayEntry.totalNetFlow;
-    const macroScoreRaw = 50; // stable mock macro score
-
     for (const sector of SECTORS) {
       const base = SECTOR_BASE_SCORES[sector];
       const sensitivity = SECTOR_MACRO_SENSITIVITY[sector];
+      const { adjustedEtfFlow, macroScoreRaw, btcPurchases } = computeDaySignals(
+        dayEntry.totalNetFlow, i, sector, sensitivity
+      );
 
-      // Apply sector sensitivity to ETF signal
-      const adjustedEtfFlow = etfNetFlow * sensitivity;
       const l3 = computeL3Score(adjustedEtfFlow, macroScoreRaw);
       const overall = computeOverall(base.l1, base.l2, l3);
 
@@ -117,7 +148,7 @@ export async function seedHistoricalData(force = false): Promise<{ inserted: num
         base.l2,
         l3,
         adjustedEtfFlow,
-        100, // mock BTC purchases (positive = accumulation continued)
+        btcPurchases,
         macroScoreRaw,
         createdAt
       );
@@ -128,24 +159,18 @@ export async function seedHistoricalData(force = false): Promise<{ inserted: num
         const thenIndex = i - 7; // ETF data 7 days after this prediction
         if (thenIndex >= 0) {
           const thenEntry = etfHistory[thenIndex];
-          const thenEtfFlow = thenEntry.totalNetFlow * sensitivity;
+          const then7 = computeDaySignals(thenEntry.totalNetFlow, thenIndex, sector, sensitivity);
 
           const result = evaluateHistoricalThesis(
-            { etfNetFlow: adjustedEtfFlow, btcPurchases: 100, macroScore: macroScoreRaw },
-            { etfNetFlow: thenEtfFlow, btcPurchases: 100, macroScore: macroScoreRaw }
+            { etfNetFlow: adjustedEtfFlow, btcPurchases, macroScore: macroScoreRaw },
+            { etfNetFlow: then7.adjustedEtfFlow, btcPurchases: then7.btcPurchases, macroScore: then7.macroScoreRaw }
           );
 
           await insertVerification(
-            id,
-            7,
-            thenEtfFlow,
-            100,
-            macroScoreRaw,
-            result.etfConfirmed,
-            result.treasuryConfirmed,
-            result.macroConfirmed,
-            result.componentsConfirmed,
-            result.thesisVerified
+            id, 7,
+            then7.adjustedEtfFlow, then7.btcPurchases, then7.macroScoreRaw,
+            result.etfConfirmed, result.treasuryConfirmed, result.macroConfirmed,
+            result.componentsConfirmed, result.thesisVerified
           );
           if (result.thesisVerified) verified++;
         }
@@ -156,24 +181,18 @@ export async function seedHistoricalData(force = false): Promise<{ inserted: num
         const thenIndex = i - 30;
         if (thenIndex >= 0) {
           const thenEntry = etfHistory[thenIndex];
-          const thenEtfFlow = thenEntry.totalNetFlow * sensitivity;
+          const then30 = computeDaySignals(thenEntry.totalNetFlow, thenIndex, sector, sensitivity);
 
           const result = evaluateHistoricalThesis(
-            { etfNetFlow: adjustedEtfFlow, btcPurchases: 100, macroScore: macroScoreRaw },
-            { etfNetFlow: thenEtfFlow, btcPurchases: 100, macroScore: macroScoreRaw }
+            { etfNetFlow: adjustedEtfFlow, btcPurchases, macroScore: macroScoreRaw },
+            { etfNetFlow: then30.adjustedEtfFlow, btcPurchases: then30.btcPurchases, macroScore: then30.macroScoreRaw }
           );
 
           await insertVerification(
-            id,
-            30,
-            thenEtfFlow,
-            100,
-            macroScoreRaw,
-            result.etfConfirmed,
-            result.treasuryConfirmed,
-            result.macroConfirmed,
-            result.componentsConfirmed,
-            result.thesisVerified
+            id, 30,
+            then30.adjustedEtfFlow, then30.btcPurchases, then30.macroScoreRaw,
+            result.etfConfirmed, result.treasuryConfirmed, result.macroConfirmed,
+            result.componentsConfirmed, result.thesisVerified
           );
         }
       }
