@@ -151,12 +151,18 @@ export default function VerifyPage() {
           <div className="space-y-6">
             {/* Summary callout */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { label: "Predictions Logged", value: summary.total.toLocaleString() },
-                { label: "Verified (7d)", value: summary.predictions.filter(p => p.thesisVerified7d === true).length },
-                { label: "Disconfirmed (7d)", value: summary.predictions.filter(p => p.thesisVerified7d === false).length },
-                { label: "Pending Resolution", value: summary.predictions.filter(p => p.thesisVerified7d === null).length },
-              ].map(stat => (
+              {(() => {
+                const totalVerified = summary.accuracy.reduce((s, a) => s + a.horizon7.combined.confirmed, 0);
+                const totalSampled  = summary.accuracy.reduce((s, a) => s + a.horizon7.combined.total, 0);
+                const totalDisconf  = totalSampled - totalVerified;
+                const totalPending  = summary.total - totalSampled;
+                return [
+                  { label: "Predictions Logged", value: summary.total.toLocaleString() },
+                  { label: "Verified (7d)", value: totalVerified.toLocaleString() },
+                  { label: "Disconfirmed (7d)", value: totalDisconf.toLocaleString() },
+                  { label: "Pending Resolution", value: Math.max(0, totalPending).toLocaleString() },
+                ];
+              })().map(stat => (
                 <div key={stat.label} className="border border-terminal-border rounded-lg p-4 bg-terminal-surface">
                   <p className="text-2xl font-black text-terminal-bright">{stat.value}</p>
                   <p className="text-xs text-terminal-text/60 mt-1">{stat.label}</p>
